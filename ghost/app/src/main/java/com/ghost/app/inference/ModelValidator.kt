@@ -28,12 +28,15 @@ object ModelValidator {
      * @return ValidationResult indicating if model is valid
      */
     fun validateModel(): ValidationResult {
-        val modelFile = GhostPaths.getModelFile()
+        // First try to find any compatible model file
+        val modelFile = GhostPaths.findModelFile() ?: GhostPaths.getModelFile()
 
         // Check if file exists
         if (!modelFile.exists()) {
-            Log.e(TAG, "Model file not found at ${GhostPaths.MODEL_PATH}")
-            return ValidationResult.Invalid("Model not found in ${GhostPaths.getDisplayPath()}")
+            Log.e(TAG, "Model file not found at ${modelFile.absolutePath}")
+            return ValidationResult.Invalid(
+                "Model not found. ${GhostPaths.getModelDownloadInstructions()}"
+            )
         }
 
         // Check if it's a file (not directory)
@@ -42,11 +45,22 @@ object ModelValidator {
             return ValidationResult.Invalid("Invalid model file type")
         }
 
+        // Check file extension (should be .gguf for llama.cpp)
+        if (!modelFile.name.endsWith(".gguf", ignoreCase = true)) {
+            Log.e(TAG, "Model file is not .gguf format: ${modelFile.name}")
+            return ValidationResult.Invalid(
+                "Invalid model format: ${modelFile.extension}. Use .gguf format. " +
+                "Note: .litertlm format is NOT compatible."
+            )
+        }
+
         // Check file size
         val fileSize = modelFile.length()
         if (fileSize < GhostPaths.MIN_MODEL_SIZE_BYTES) {
             Log.e(TAG, "Model file too small: $fileSize bytes")
-            return ValidationResult.Invalid("Model file appears to be corrupted (too small)")
+            return ValidationResult.Invalid(
+                "Model file appears to be corrupted (too small: ${formatFileSize(fileSize)})"
+            )
         }
 
         // Check if file is readable
@@ -55,7 +69,7 @@ object ModelValidator {
             return ValidationResult.Invalid("Cannot read model file (permission denied)")
         }
 
-        Log.i(TAG, "Model validation passed: ${fileSize / (1024 * 1024)} MB")
+        Log.i(TAG, "Model validation passed: ${formatFileSize(fileSize)}")
         return ValidationResult.Valid
     }
 
@@ -69,14 +83,7 @@ object ModelValidator {
         return when (val result = validateModel()) {
             is ValidationResult.Valid -> true
             is ValidationResult.Invalid -> {
-                val message = when {
-                    result.reason.contains("not found") ->
-                        context.getString(R.string.model_not_found)
-                    result.reason.contains("corrupted") ->
-                        context.getString(R.string.model_too_small)
-                    else -> result.reason
-                }
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                Toast.makeText(context, result.reason, Toast.LENGTH_LONG).show()
                 false
             }
         }
@@ -88,10 +95,22 @@ object ModelValidator {
      * @return String like "2.5 GB"
      */
     fun getModelSizeString(): String {
-        val file = GhostPaths.getModelFile()
+        val file = GhostPaths.findModelFile() ?: GhostPaths.getModelFile()
         if (!file.exists()) return "0 MB"
+        return formatFileSize(file.length())
+    }
 
-        val sizeBytes = file.length()
+    /**
+     * Check if model file exists without full validation.
+     */
+    fun modelExists(): Boolean {
+        return GhostPaths.findModelFile()?.exists() == true
+    }
+    
+    /**
+     * Format file size to human readable string.
+     */
+    private fun formatFileSize(sizeBytes: Long): String {
         val sizeGB = sizeBytes / (1024.0 * 1024.0 * 1024.0)
         val sizeMB = sizeBytes / (1024.0 * 1024.0)
 
@@ -100,12 +119,5 @@ object ModelValidator {
         } else {
             String.format("%.0f MB", sizeMB)
         }
-    }
-
-    /**
-     * Check if model file exists without full validation.
-     */
-    fun modelExists(): Boolean {
-        return GhostPaths.getModelFile().exists()
     }
 }

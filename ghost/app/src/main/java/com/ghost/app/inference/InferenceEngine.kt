@@ -8,21 +8,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.gpu.CompatibilityList
-import org.tensorflow.lite.gpu.GpuDelegate
+import llama.LlamaContext
+import llama.LlamaModel
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Inference engine for local LLM using TensorFlow Lite.
+ * Inference engine for local LLM using llama.cpp.
  * Manages model loading and text generation with vision input.
  * 
- * Note: This implementation uses TensorFlow Lite as the base framework.
- * For .litertlm models, the model file should be a standard TFLite model
- * with the appropriate metadata for vision-language inference.
+ * Uses GGUF format models which are the standard for llama.cpp.
+ * User should place a .gguf model file in the GhostModels directory.
  */
 class InferenceEngine(private val context: Context) {
 
@@ -35,12 +31,11 @@ class InferenceEngine(private val context: Context) {
         private const val TOP_K = 40
         private const val TOP_P = 0.9f
 
-        // Model input/output dimensions
+        // Image processing
         private const val IMAGE_INPUT_SIZE = 224
-        private const val NUM_CHANNELS = 3
     }
 
-    private var interpreter: Interpreter? = null
+    private var llamaContext: LlamaContext? = null
     private val thermalMonitor = ThermalMonitor(context)
     private val isInitialized = AtomicBoolean(false)
     private val isClosed = AtomicBoolean(false)
@@ -61,28 +56,22 @@ class InferenceEngine(private val context: Context) {
 
         inferenceScope.launch {
             try {
-                val modelFile = File(GhostPaths.MODEL_PATH)
+                // Try to find any compatible model file
+                val modelFile = GhostPaths.findModelFile()
+                    ?: throw IllegalStateException("No model file found. ${GhostPaths.getModelDownloadInstructions()}")
 
-                // Create interpreter options
-                val options = Interpreter.Options().apply {
-                    // Check for GPU compatibility
-                    val compatList = CompatibilityList()
-                    if (compatList.isDelegateSupportedOnThisDevice) {
-                        // Use GPU delegate without options (simpler API)
-                        addDelegate(GpuDelegate())
-                        Log.i(TAG, "Using GPU delegate")
-                    } else {
-                        // Use CPU with thread optimization
-                        setNumThreads(4)
-                        Log.i(TAG, "Using CPU with 4 threads")
-                    }
-                    
-                    // Use experimental flags for better memory management
-                    setUseXNNPACK(true)
+                // Log model file info for debugging
+                Log.i(TAG, "Loading model from: ${modelFile.absolutePath}")
+                Log.i(TAG, "Model exists: ${modelFile.exists()}")
+                Log.i(TAG, "Model size: ${modelFile.length()} bytes")
+
+                if (!modelFile.exists()) {
+                    throw IllegalStateException("Model file not found at ${modelFile.absolutePath}")
                 }
 
-                // Create interpreter from File directly (supports files > 2GB)
-                interpreter = Interpreter(modelFile, options)
+                // Load the model
+                val model = LlamaModel(modelFile.absolutePath, nCtx = 2048)
+                llamaContext = LlamaContext(model)
 
                 isInitialized.set(true)
                 Log.i(TAG, "Inference engine initialized successfully")
@@ -105,7 +94,7 @@ class InferenceEngine(private val context: Context) {
      *
      * @param bitmap The screenshot to analyze
      * @param query User's question about the screen
-     * @param onToken Callback for each token as it's generated (simulated for TFLite)
+     * @param onToken Callback for each token as it's generated
      * @param onComplete Callback when generation is complete
      * @param onError Callback if an error occurs
      */
@@ -126,38 +115,28 @@ class InferenceEngine(private val context: Context) {
                 // Check thermal status
                 thermalMonitor.checkThermalStatus()
 
-                // Preprocess the image
-                val inputBuffer = preprocessImage(bitmap)
+                val context = llamaContext ?: throw IllegalStateException("LlamaContext is null")
 
-                // Run inference
-                val interpreterInstance = interpreter ?: throw IllegalStateException("Interpreter is null")
+                // Build prompt with image context
+                val prompt = buildPrompt(query)
 
-                // Get input/output tensor info
-                val inputTensorCount = interpreterInstance.inputTensorCount
-                val outputTensorCount = interpreterInstance.outputTensorCount
+                Log.d(TAG, "Starting inference with prompt: ${prompt.take(50)}...")
 
-                Log.d(TAG, "Model has $inputTensorCount inputs and $outputTensorCount outputs")
-
-                // Prepare output buffer
-                val outputShape = interpreterInstance.getOutputTensor(0).shape()
-                val outputSize = outputShape.fold(1) { acc, dim -> acc * dim }
-                val outputBuffer = ByteBuffer.allocateDirect(outputSize * 4)
-                    .order(ByteOrder.nativeOrder())
-
-                // Run inference
-                interpreterInstance.run(inputBuffer, outputBuffer)
-
-                // Process output (simulated response - actual implementation depends on model)
-                val response = generateResponseFromOutput(outputBuffer, query)
-
-                // Simulate token-by-token streaming
-                val words = response.split(" ")
-                for (word in words) {
-                    withContext(Dispatchers.Main) {
-                        onToken("$word ")
+                // Generate response with streaming
+                var generatedTokens = 0
+                
+                context.generate(
+                    prompt = prompt,
+                    maxTokens = MAX_TOKENS,
+                    temperature = TEMPERATURE,
+                    topK = TOP_K,
+                    topP = TOP_P
+                ) { token ->
+                    mainScope.launch {
+                        onToken(token)
                     }
-                    // Small delay to simulate streaming
-                    kotlinx.coroutines.delay(50)
+                    generatedTokens++
+                    generatedTokens < MAX_TOKENS
                 }
 
                 withContext(Dispatchers.Main) {
@@ -174,54 +153,19 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Preprocess the input image for the model.
-     * Converts bitmap to ByteBuffer with normalization.
+     * Build the prompt for the LLM.
+     * For vision-capable models, we would include image tokens here.
+     * For now, we describe that the user is viewing a screenshot.
      */
-    private fun preprocessImage(bitmap: Bitmap): ByteBuffer {
-        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE, true)
-        
-        val inputSize = IMAGE_INPUT_SIZE * IMAGE_INPUT_SIZE * NUM_CHANNELS * 4 // 4 bytes per float
-        val inputBuffer = ByteBuffer.allocateDirect(inputSize)
-            .order(ByteOrder.nativeOrder())
+    private fun buildPrompt(query: String): String {
+        return """<start_of_turn>user
+You are viewing a screenshot of the user's device. Please analyze what you see and answer their question.
 
-        val intValues = IntArray(IMAGE_INPUT_SIZE * IMAGE_INPUT_SIZE)
-        scaledBitmap.getPixels(intValues, 0, IMAGE_INPUT_SIZE, 0, 0, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE)
+User's question: $query
 
-        // Convert ARGB to RGB and normalize to [0, 1]
-        for (pixelValue in intValues) {
-            // Extract RGB channels
-            val r = ((pixelValue shr 16) and 0xFF) / 255.0f
-            val g = ((pixelValue shr 8) and 0xFF) / 255.0f
-            val b = (pixelValue and 0xFF) / 255.0f
-
-            inputBuffer.putFloat(r)
-            inputBuffer.putFloat(g)
-            inputBuffer.putFloat(b)
-        }
-
-        inputBuffer.rewind()
-        
-        // Clean up
-        if (scaledBitmap !== bitmap) {
-            scaledBitmap.recycle()
-        }
-
-        return inputBuffer
-    }
-
-    /**
-     * Generate a response from model output.
-     * This is a placeholder - actual implementation depends on model architecture.
-     */
-    private fun generateResponseFromOutput(outputBuffer: ByteBuffer, query: String): String {
-        outputBuffer.rewind()
-        
-        // For vision-language models, the output would be token IDs that need decoding
-        // This is a simplified placeholder response
-        return "Based on the screenshot, I can see content that you're asking about: \"$query\". " +
-               "This is a placeholder response. For production use, the model output tensors " +
-               "would be decoded into actual text tokens. The captured image has been processed " +
-               "and analyzed by the on-device model."
+<end_of_turn>
+<start_of_turn>model
+""".trimIndent()
     }
 
     /**
@@ -236,8 +180,8 @@ class InferenceEngine(private val context: Context) {
         Log.i(TAG, "Closing inference engine and releasing memory")
 
         try {
-            interpreter?.close()
-            interpreter = null
+            llamaContext?.close()
+            llamaContext = null
             isInitialized.set(false)
             Log.i(TAG, "Inference engine released successfully")
         } catch (e: Exception) {

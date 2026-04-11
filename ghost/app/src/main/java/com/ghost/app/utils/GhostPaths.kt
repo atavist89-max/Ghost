@@ -18,16 +18,44 @@ object GhostPaths {
 
     /**
      * Path to the LLM model file.
-     * User must place the 2.5GB .litertlm file here before using the app.
+     * User must place a .gguf model file here before using the app.
+     * 
+     * Compatible models:
+     * - Gemma GGUF from HuggingFace
+     * - Llama GGUF
+     * - Any llama.cpp compatible model
+     * 
+     * Download example:
+     * wget https://huggingface.co/TheBloke/gemma-2b-it-GGUF/resolve/main/gemma-2b-it.Q4_K_M.gguf
      */
     val MODEL_PATH: String
-        get() = "$BASE_DIR/gemma-4-e2b.litertlm"
+        get() = "$BASE_DIR/model.gguf"
 
     /**
-     * Minimum model file size in bytes (2GB).
-     * Used to validate model file integrity.
+     * Alternative model names to look for (for flexibility)
      */
-    const val MIN_MODEL_SIZE_BYTES = 2_000_000_000L
+    fun findModelFile(): File? {
+        val possibleNames = listOf(
+            "model.gguf",
+            "gemma-2b-it.gguf",
+            "gemma.gguf",
+            "llm.gguf"
+        )
+        
+        for (name in possibleNames) {
+            val file = File(BASE_DIR, name)
+            if (file.exists()) {
+                return file
+            }
+        }
+        return null
+    }
+
+    /**
+     * Minimum model file size in bytes (500MB).
+     * GGUF models are typically 1-4GB.
+     */
+    const val MIN_MODEL_SIZE_BYTES = 500_000_000L
 
     /**
      * Get the model file reference.
@@ -52,4 +80,20 @@ object GhostPaths {
      * Get human-readable model path for display purposes.
      */
     fun getDisplayPath(): String = "Internal Storage/Download/GhostModels/"
+    
+    /**
+     * Get instructions for downloading a compatible model.
+     */
+    fun getModelDownloadInstructions(): String {
+        return """Download a GGUF model and place it in:
+${getDisplayPath()}
+
+Recommended models:
+1. Gemma 2B Q4_K_M (~1.5GB):
+   wget https://huggingface.co/TheBloke/gemma-2b-it-GGUF/resolve/main/gemma-2b-it.Q4_K_M.gguf
+
+2. Or rename any .gguf file to 'model.gguf'
+
+Note: .litertlm format is NOT compatible. Use .gguf format only."""
+    }
 }

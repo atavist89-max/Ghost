@@ -62,9 +62,8 @@ android {
 }
 
 dependencies {
-    // TensorFlow Lite (Local LLM inference) - Using only core, no support library to avoid conflicts
-    implementation("org.tensorflow:tensorflow-lite:2.17.0")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.17.0")
+    // llama.cpp for local LLM inference
+    implementation("io.github.shiinedev:llama-android:0.0.1")
     
     // Activity and lifecycle
     implementation("androidx.activity:activity-compose:1.9.0")
