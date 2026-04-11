@@ -189,7 +189,7 @@ private fun GhostResponseArea(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .weight(1.0f)
+            .fillMaxHeight()
             .clip(RoundedCornerShape(8.dp))
             .background(DarkSurface)
             .padding(12.dp)
@@ -266,7 +266,7 @@ private fun GhostInputArea(
                 }
             },
             modifier = Modifier
-                .weight(1.0f)
+                .fillMaxWidth()
                 .padding(vertical = 8.dp),
             singleLine = true
         )

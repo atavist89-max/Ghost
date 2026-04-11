@@ -74,8 +74,8 @@ class InferenceEngine(private val context: Context) {
                     // Check for GPU compatibility
                     val compatList = CompatibilityList()
                     if (compatList.isDelegateSupportedOnThisDevice) {
-                        val gpuOptions = compatList.bestOptionsForThisDevice
-                        addDelegate(GpuDelegate(gpuOptions))
+                        // Use GPU delegate without options (simpler API)
+                        addDelegate(GpuDelegate())
                         Log.i(TAG, "Using GPU delegate")
                     } else {
                         // Use CPU with thread optimization
