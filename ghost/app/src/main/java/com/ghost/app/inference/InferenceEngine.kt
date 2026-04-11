@@ -7,6 +7,7 @@ import com.ghost.app.utils.GhostPaths
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,13 +74,12 @@ class InferenceEngine(private val context: Context) {
                 thermalMonitor.checkThermalStatus()
                 
                 // Select backend based on thermal state
-                // Backend is an interface - use the factory methods or enum values
                 val backend = if (thermalMonitor.shouldUseGpu()) {
                     Log.i(TAG, "Using GPU backend")
-                    Backend.gpu()
+                    Backend.GPU
                 } else {
                     Log.i(TAG, "Using CPU backend")
-                    Backend.cpu()
+                    Backend.CPU
                 }
 
                 // Create engine configuration
@@ -143,13 +143,13 @@ class InferenceEngine(private val context: Context) {
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // Generate response
-                    // LiteRT-LM generate method signature varies by version
-                    // Using the most common pattern
-                    val response = conversation.generateResponse(userMessage)
+                    // Send message and get response
+                    val userMessageObj = Message.of(userMessage)
+                    val responseMessage = conversation.sendMessage(userMessageObj)
+                    val responseText = responseMessage.toString()
                     
                     // Simulate streaming by splitting into words/tokens
-                    val tokens = response.split(" ")
+                    val tokens = responseText.split(" ")
                     
                     for (token in tokens) {
                         mainScope.launch {
