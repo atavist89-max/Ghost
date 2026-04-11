@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost</string>
+    <string name="app_name_short">Ghost</string>
+
+    <!-- Permission messages -->
+    <string name="permission_storage_required">Storage permission required for model access</string>
+    <string name="permission_overlay_required">Overlay permission required for floating window</string>
+    <string name="permission_settings_redirect">Please enable "All files access" in Settings</string>
+
+    <!-- Model validation -->
+    <string name="model_not_found">Model not found in Internal Storage/Downloads/GhostModels/</string>
+    <string name="model_too_small">Model file appears to be corrupted (too small)</string>
+    <string name="model_loading">Loading model…</string>
+
+    <!-- UI Labels -->
+    <string name="hint_type_question">Ask about the screen…</string>
+    <string name="button_send">Send</string>
+    <string name="button_close">×</string>
+    <string name="button_expand">Expand</string>
+    <string name="button_shrink">Shrink</string>
+    <string name="capturing_screen">Capturing screen…</string>
+    <string name="analyzing">Analyzing…</string>
+    <string name="thinking">Thinking…</string>
+
+    <!-- Error messages -->
+    <string name="error_capture_failed">Failed to capture screen</string>
+    <string name="error_inference_failed">Analysis failed. Please try again.</string>
+    <string name="error_thermal_throttling">Device warming up. Switching to GPU…</string>
+
+    <!-- Status messages -->
+    <string name="status_ready">Ready</string>
+    <string name="status_listening">Listening…</string>
+    <string name="drag_to_move">Drag to move</string>
+    <string name="swipe_to_close">Swipe off screen to close</string>
+</resources>

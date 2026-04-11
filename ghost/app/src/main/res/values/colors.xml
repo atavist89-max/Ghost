@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Phosphor Green - Signature accent color -->
+    <color name="phosphor_green">#39FF14</color>
+    <color name="phosphor_green_dim">#1A800A</color>
+    <color name="phosphor_green_bright">#5FFF3F</color>
+
+    <!-- Dark theme base colors -->
+    <color name="dark_background">#0A0A0A</color>
+    <color name="dark_surface">#141414</color>
+    <color name="dark_surface_variant">#1E1E1E</color>
+
+    <!-- Text colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B3B3B3</color>
+    <color name="text_disabled">#666666</color>
+
+    <!-- Utility colors -->
+    <color name="error_red">#FF4444</color>
+    <color name="warning_yellow">#FFAA00</color>
+    <color name="transparent">#00000000</color>
+    <color name="semi_transparent_black">#CC000000</color>
+</resources>

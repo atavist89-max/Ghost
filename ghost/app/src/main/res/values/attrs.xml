@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom attributes if needed -->
+    <declare-styleable name="GhostWindow">
+        <attr name="windowDragEnabled" format="boolean" />
+        <attr name="windowCloseOnSwipe" format="boolean" />
+    </declare-styleable>
+</resources>
