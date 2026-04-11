@@ -1,5 +1,6 @@
 package com.ghost.app.utils
 
+import android.os.Environment
 import java.io.File
 
 /**
@@ -10,14 +11,17 @@ object GhostPaths {
 
     /**
      * Base directory for Ghost application data.
+     * Uses the actual external storage path instead of legacy /sdcard symlink.
      */
-    private const val BASE_DIR = "/sdcard/Download/GhostModels"
+    private val BASE_DIR: String
+        get() = File(Environment.getExternalStorageDirectory(), "Download/GhostModels").absolutePath
 
     /**
      * Path to the LLM model file.
      * User must place the 2.5GB .litertlm file here before using the app.
      */
-    const val MODEL_PATH = "$BASE_DIR/gemma-4-e2b.litertlm"
+    val MODEL_PATH: String
+        get() = "$BASE_DIR/gemma-4-e2b.litertlm"
 
     /**
      * Minimum model file size in bytes (2GB).
@@ -47,5 +51,5 @@ object GhostPaths {
     /**
      * Get human-readable model path for display purposes.
      */
-    fun getDisplayPath(): String = "Internal Storage/Downloads/GhostModels/"
+    fun getDisplayPath(): String = "Internal Storage/Download/GhostModels/"
 }
