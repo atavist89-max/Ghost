@@ -62,8 +62,8 @@ android {
 }
 
 dependencies {
-    // llama.cpp for local LLM inference
-    implementation("io.github.shiinedev:llama-android:0.0.1")
+    // LiteRT-LM (Official Google library for .litertlm models)
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
     
     // Activity and lifecycle
     implementation("androidx.activity:activity-compose:1.9.0")

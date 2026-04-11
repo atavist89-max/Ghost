@@ -45,12 +45,12 @@ object ModelValidator {
             return ValidationResult.Invalid("Invalid model file type")
         }
 
-        // Check file extension (should be .gguf for llama.cpp)
-        if (!modelFile.name.endsWith(".gguf", ignoreCase = true)) {
-            Log.e(TAG, "Model file is not .gguf format: ${modelFile.name}")
+        // Check file extension (should be .litertlm for LiteRT-LM)
+        if (!modelFile.name.endsWith(".litertlm", ignoreCase = true)) {
+            Log.e(TAG, "Model file is not .litertlm format: ${modelFile.name}")
             return ValidationResult.Invalid(
-                "Invalid model format: ${modelFile.extension}. Use .gguf format. " +
-                "Note: .litertlm format is NOT compatible."
+                "Invalid model format: ${modelFile.extension}. Use .litertlm format. " +
+                "Note: .gguf format is NOT compatible with this app."
             )
         }
 

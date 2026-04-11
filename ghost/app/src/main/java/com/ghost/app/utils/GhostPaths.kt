@@ -18,28 +18,27 @@ object GhostPaths {
 
     /**
      * Path to the LLM model file.
-     * User must place a .gguf model file here before using the app.
+     * User must place the .litertlm file here before using the app.
      * 
      * Compatible models:
-     * - Gemma GGUF from HuggingFace
-     * - Llama GGUF
-     * - Any llama.cpp compatible model
+     * - Gemma (all variants) from HuggingFace litert-community
+     * - Llama, Phi-4, Qwen in .litertlm format
      * 
      * Download example:
-     * wget https://huggingface.co/TheBloke/gemma-2b-it-GGUF/resolve/main/gemma-2b-it.Q4_K_M.gguf
+     * wget https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm
      */
     val MODEL_PATH: String
-        get() = "$BASE_DIR/model.gguf"
+        get() = "$BASE_DIR/gemma-4-e2b.litertlm"
 
     /**
      * Alternative model names to look for (for flexibility)
      */
     fun findModelFile(): File? {
         val possibleNames = listOf(
-            "model.gguf",
-            "gemma-2b-it.gguf",
-            "gemma.gguf",
-            "llm.gguf"
+            "gemma-4-e2b.litertlm",
+            "model.litertlm",
+            "gemma.litertlm",
+            "llm.litertlm"
         )
         
         for (name in possibleNames) {
@@ -53,7 +52,7 @@ object GhostPaths {
 
     /**
      * Minimum model file size in bytes (500MB).
-     * GGUF models are typically 1-4GB.
+     * LiteRT-LM models are typically 1-5GB.
      */
     const val MIN_MODEL_SIZE_BYTES = 500_000_000L
 
@@ -85,15 +84,15 @@ object GhostPaths {
      * Get instructions for downloading a compatible model.
      */
     fun getModelDownloadInstructions(): String {
-        return """Download a GGUF model and place it in:
+        return """Download a .litertlm model and place it in:
 ${getDisplayPath()}
 
 Recommended models:
-1. Gemma 2B Q4_K_M (~1.5GB):
-   wget https://huggingface.co/TheBloke/gemma-2b-it-GGUF/resolve/main/gemma-2b-it.Q4_K_M.gguf
+1. Gemma 4 E2B (~2.5GB):
+   wget https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm
 
-2. Or rename any .gguf file to 'model.gguf'
+2. Or rename any .litertlm file to 'gemma-4-e2b.litertlm'
 
-Note: .litertlm format is NOT compatible. Use .gguf format only."""
+The app uses Google's official LiteRT-LM library for .litertlm models."""
     }
 }
