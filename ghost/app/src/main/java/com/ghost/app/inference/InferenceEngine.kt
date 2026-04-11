@@ -12,11 +12,8 @@ import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
 import java.io.File
-import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.MappedByteBuffer
-import java.nio.channels.FileChannel
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -66,9 +63,6 @@ class InferenceEngine(private val context: Context) {
             try {
                 val modelFile = File(GhostPaths.MODEL_PATH)
 
-                // Load the model file manually
-                val modelBuffer: MappedByteBuffer = loadModelFile(modelFile)
-
                 // Create interpreter options
                 val options = Interpreter.Options().apply {
                     // Check for GPU compatibility
@@ -87,8 +81,8 @@ class InferenceEngine(private val context: Context) {
                     setUseXNNPACK(true)
                 }
 
-                // Create interpreter
-                interpreter = Interpreter(modelBuffer, options)
+                // Create interpreter from File directly (supports files > 2GB)
+                interpreter = Interpreter(modelFile, options)
 
                 isInitialized.set(true)
                 Log.i(TAG, "Inference engine initialized successfully")
@@ -103,18 +97,6 @@ class InferenceEngine(private val context: Context) {
                     onComplete(false, e.message)
                 }
             }
-        }
-    }
-
-    /**
-     * Load model file into a MappedByteBuffer.
-     */
-    private fun loadModelFile(modelFile: File): MappedByteBuffer {
-        FileInputStream(modelFile).use { inputStream ->
-            val fileChannel = inputStream.channel
-            val startOffset = 0L
-            val declaredLength = modelFile.length()
-            return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
         }
     }
 
