@@ -5,12 +5,8 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.ghost.app.utils.GhostPaths
 import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Conversation
-import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.Message
-import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,13 +27,12 @@ class InferenceEngine(private val context: Context) {
 
         // Generation parameters
         private const val MAX_TOKENS = 512
-        private const val TEMPERATURE = 0.7f
+        private const val TEMPERATURE = 0.7
         private const val TOP_K = 40
-        private const val TOP_P = 0.9f
+        private const val TOP_P = 0.9
     }
 
     private var engine: Engine? = null
-    private var conversation: Conversation? = null
     private val thermalMonitor = ThermalMonitor(context)
     private val isInitialized = AtomicBoolean(false)
     private val isClosed = AtomicBoolean(false)
@@ -76,12 +71,15 @@ class InferenceEngine(private val context: Context) {
 
                 // Check thermal status to decide backend
                 thermalMonitor.checkThermalStatus()
+                
+                // Select backend based on thermal state
+                // Backend is an interface - use the factory methods or enum values
                 val backend = if (thermalMonitor.shouldUseGpu()) {
                     Log.i(TAG, "Using GPU backend")
-                    Backend.GPU
+                    Backend.gpu()
                 } else {
                     Log.i(TAG, "Using CPU backend")
-                    Backend.CPU
+                    Backend.cpu()
                 }
 
                 // Create engine configuration
@@ -94,20 +92,6 @@ class InferenceEngine(private val context: Context) {
                 // Create and initialize engine
                 engine = Engine(engineConfig)
                 engine?.initialize()
-
-                // Create conversation with custom config
-                val conversationConfig = ConversationConfig(
-                    systemMessage = Message.of(
-                        "You are a helpful AI assistant. The user will share screenshots of their screen " +
-                        "and ask questions about what they see. Analyze the content and provide helpful answers."
-                    ),
-                    samplerConfig = SamplerConfig(
-                        topK = TOP_K,
-                        topP = TOP_P,
-                        temperature = TEMPERATURE
-                    )
-                )
-                conversation = engine?.createConversation(conversationConfig)
 
                 isInitialized.set(true)
                 Log.i(TAG, "Inference engine initialized successfully")
@@ -148,31 +132,38 @@ class InferenceEngine(private val context: Context) {
 
         inferenceScope.launch {
             try {
-                val conv = conversation ?: throw IllegalStateException("Conversation is null")
+                val engineInstance = engine ?: throw IllegalStateException("Engine is null")
 
                 // Build the user message with context about the screenshot
                 val userMessage = buildUserMessage(bitmap, query)
 
                 Log.d(TAG, "Sending message to model: ${userMessage.take(100)}...")
 
-                // Generate response - LiteRT-LM doesn't have native streaming
-                // We'll get the full response and simulate token streaming
-                val response = conv.sendMessage(Message.of(userMessage))
-                
-                // Simulate streaming by splitting into words/tokens
-                val responseText = response.text
-                val tokens = responseText.split(" ")
-                
-                for (token in tokens) {
-                    mainScope.launch {
-                        onToken("$token ")
-                    }
-                    // Small delay for streaming effect
-                    kotlinx.coroutines.delay(30)
-                }
+                // Create a conversation
+                val conversation = engineInstance.createConversation()
 
-                withContext(Dispatchers.Main) {
-                    onComplete()
+                try {
+                    // Generate response
+                    // LiteRT-LM generate method signature varies by version
+                    // Using the most common pattern
+                    val response = conversation.generateResponse(userMessage)
+                    
+                    // Simulate streaming by splitting into words/tokens
+                    val tokens = response.split(" ")
+                    
+                    for (token in tokens) {
+                        mainScope.launch {
+                            onToken("$token ")
+                        }
+                        // Small delay for streaming effect
+                        kotlinx.coroutines.delay(30)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        onComplete()
+                    }
+                } finally {
+                    conversation.close()
                 }
 
             } catch (e: Exception) {
@@ -192,11 +183,15 @@ class InferenceEngine(private val context: Context) {
      * If the model supports image input, we would include the bitmap here.
      */
     private fun buildUserMessage(bitmap: Bitmap, query: String): String {
-        return """I am viewing a screenshot of my device screen (size: ${bitmap.width}x${bitmap.height}).
+        return """<start_of_turn>user
+I am viewing a screenshot of my device screen (size: ${bitmap.width}x${bitmap.height}).
 
 My question: $query
 
-Please analyze what might be visible on the screen and answer my question.""".trimIndent()
+Please analyze what might be visible on the screen and answer my question.
+<end_of_turn>
+<start_of_turn>model
+""".trimIndent()
     }
 
     /**
@@ -211,12 +206,8 @@ Please analyze what might be visible on the screen and answer my question.""".tr
         Log.i(TAG, "Closing inference engine and releasing memory")
 
         try {
-            conversation?.close()
-            conversation = null
-            
             engine?.close()
             engine = null
-            
             isInitialized.set(false)
             Log.i(TAG, "Inference engine released successfully")
         } catch (e: Exception) {
