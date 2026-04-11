@@ -11,17 +11,12 @@ import kotlinx.coroutines.withContext
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
-import org.tensorflow.lite.support.common.FileUtil
-import org.tensorflow.lite.support.common.ops.CastOp
-import org.tensorflow.lite.support.common.ops.NormalizeOp
-import org.tensorflow.lite.support.image.ImageProcessor
-import org.tensorflow.lite.support.image.TensorImage
-import org.tensorflow.lite.support.image.ops.ResizeOp
-import org.tensorflow.lite.support.label.TensorLabel
-import org.tensorflow.lite.support.model.Model
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import java.io.File
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -32,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * For .litertlm models, the model file should be a standard TFLite model
  * with the appropriate metadata for vision-language inference.
  */
-class InferenceEngine(context: Context) {
+class InferenceEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "GhostInference"
@@ -71,11 +66,8 @@ class InferenceEngine(context: Context) {
             try {
                 val modelFile = File(GhostPaths.MODEL_PATH)
 
-                // Load the model file
-                val modelBuffer: MappedByteBuffer = FileUtil.loadMappedFile(
-                    modelFile.parentFile?.parentFile?.parentFile?.parentFile?.parentFile?.parentFile?.parentFile?.parentFile,
-                    modelFile.absolutePath
-                ) ?: throw IllegalStateException("Failed to load model file")
+                // Load the model file manually
+                val modelBuffer: MappedByteBuffer = loadModelFile(modelFile)
 
                 // Create interpreter options
                 val options = Interpreter.Options().apply {
@@ -93,7 +85,6 @@ class InferenceEngine(context: Context) {
                     
                     // Use experimental flags for better memory management
                     setUseXNNPACK(true)
-                    setAllowBufferHandleOutput(true)
                 }
 
                 // Create interpreter
@@ -112,6 +103,18 @@ class InferenceEngine(context: Context) {
                     onComplete(false, e.message)
                 }
             }
+        }
+    }
+
+    /**
+     * Load model file into a MappedByteBuffer.
+     */
+    private fun loadModelFile(modelFile: File): MappedByteBuffer {
+        FileInputStream(modelFile).use { inputStream ->
+            val fileChannel = inputStream.channel
+            val startOffset = 0L
+            val declaredLength = modelFile.length()
+            return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
         }
     }
 
@@ -142,7 +145,7 @@ class InferenceEngine(context: Context) {
                 thermalMonitor.checkThermalStatus()
 
                 // Preprocess the image
-                val processedImage = preprocessImage(bitmap)
+                val inputBuffer = preprocessImage(bitmap)
 
                 // Run inference
                 val interpreterInstance = interpreter ?: throw IllegalStateException("Interpreter is null")
@@ -153,24 +156,14 @@ class InferenceEngine(context: Context) {
 
                 Log.d(TAG, "Model has $inputTensorCount inputs and $outputTensorCount outputs")
 
-                // Prepare input tensor
-                val inputShape = interpreterInstance.getInputTensor(0).shape()
-                val inputDataType = interpreterInstance.getInputTensor(0).dataType()
-                
-                Log.d(TAG, "Input shape: ${inputShape.contentToString()}, type: $inputDataType")
-
-                // Create input buffer based on model requirements
-                // This is a simplified implementation - actual implementation depends on model spec
-                val inputBuffer = TensorBuffer.createFixedSize(inputShape, inputDataType)
-                inputBuffer.loadBuffer(processedImage.buffer)
-
-                // Create output buffer
+                // Prepare output buffer
                 val outputShape = interpreterInstance.getOutputTensor(0).shape()
-                val outputDataType = interpreterInstance.getOutputTensor(0).dataType()
-                val outputBuffer = TensorBuffer.createFixedSize(outputShape, outputDataType)
+                val outputSize = outputShape.fold(1) { acc, dim -> acc * dim }
+                val outputBuffer = ByteBuffer.allocateDirect(outputSize * 4)
+                    .order(ByteOrder.nativeOrder())
 
                 // Run inference
-                interpreterInstance.run(inputBuffer.buffer, outputBuffer.buffer)
+                interpreterInstance.run(inputBuffer, outputBuffer)
 
                 // Process output (simulated response - actual implementation depends on model)
                 val response = generateResponseFromOutput(outputBuffer, query)
@@ -200,31 +193,53 @@ class InferenceEngine(context: Context) {
 
     /**
      * Preprocess the input image for the model.
+     * Converts bitmap to ByteBuffer with normalization.
      */
-    private fun preprocessImage(bitmap: Bitmap): TensorImage {
-        val imageProcessor = ImageProcessor.Builder()
-            .add(ResizeOp(IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
-            .add(NormalizeOp(0f, 255f))  // Normalize to [0, 1]
-            .add(CastOp(org.tensorflow.lite.DataType.FLOAT32))
-            .build()
-
-        var tensorImage = TensorImage.fromBitmap(bitmap)
-        tensorImage = imageProcessor.process(tensorImage)
+    private fun preprocessImage(bitmap: Bitmap): ByteBuffer {
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE, true)
         
-        return tensorImage
+        val inputSize = IMAGE_INPUT_SIZE * IMAGE_INPUT_SIZE * NUM_CHANNELS * 4 // 4 bytes per float
+        val inputBuffer = ByteBuffer.allocateDirect(inputSize)
+            .order(ByteOrder.nativeOrder())
+
+        val intValues = IntArray(IMAGE_INPUT_SIZE * IMAGE_INPUT_SIZE)
+        scaledBitmap.getPixels(intValues, 0, IMAGE_INPUT_SIZE, 0, 0, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE)
+
+        // Convert ARGB to RGB and normalize to [0, 1]
+        for (pixelValue in intValues) {
+            // Extract RGB channels
+            val r = ((pixelValue shr 16) and 0xFF) / 255.0f
+            val g = ((pixelValue shr 8) and 0xFF) / 255.0f
+            val b = (pixelValue and 0xFF) / 255.0f
+
+            inputBuffer.putFloat(r)
+            inputBuffer.putFloat(g)
+            inputBuffer.putFloat(b)
+        }
+
+        inputBuffer.rewind()
+        
+        // Clean up
+        if (scaledBitmap !== bitmap) {
+            scaledBitmap.recycle()
+        }
+
+        return inputBuffer
     }
 
     /**
      * Generate a response from model output.
      * This is a placeholder - actual implementation depends on model architecture.
      */
-    private fun generateResponseFromOutput(outputBuffer: TensorBuffer, query: String): String {
+    private fun generateResponseFromOutput(outputBuffer: ByteBuffer, query: String): String {
+        outputBuffer.rewind()
+        
         // For vision-language models, the output would be token IDs that need decoding
         // This is a simplified placeholder response
         return "Based on the screenshot, I can see content that you're asking about: \"$query\". " +
                "This is a placeholder response. For production use, the model output tensors " +
-               "would be decoded into actual text tokens. The captured image shows a screen " +
-               "at ${outputBuffer.floatArray.size} output dimensions."
+               "would be decoded into actual text tokens. The captured image has been processed " +
+               "and analyzed by the on-device model."
     }
 
     /**

@@ -6,17 +6,17 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.lifecycleScope
 import com.ghost.app.capture.ScreenCaptureManager
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.inference.ModelValidator
 import com.ghost.app.ui.GhostWindowManager
 import com.ghost.app.utils.MemoryManager
 import com.ghost.app.utils.PermissionChecker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Main entry point for Ghost application.
@@ -27,11 +27,15 @@ class GhostActivity : Activity() {
     companion object {
         private const val TAG = "GhostActivity"
         const val ACTION_TRIGGER = "com.ghost.app.ACTION_TRIGGER"
+        private const val REQUEST_MEDIA_PROJECTION = 1001
     }
 
     // State flows for UI updates
     private val _responseText = MutableStateFlow("")
     private val _isGenerating = MutableStateFlow(false)
+
+    // Coroutine scope for this activity
+    private val mainScope = CoroutineScope(Dispatchers.Main)
 
     // Managers
     private lateinit var screenCaptureManager: ScreenCaptureManager
@@ -40,13 +44,6 @@ class GhostActivity : Activity() {
 
     // Captured screen state
     private var capturedBitmap: Bitmap? = null
-
-    // MediaProjection launcher
-    private val captureLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        handleCaptureResult(result)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,14 +124,27 @@ class GhostActivity : Activity() {
     private fun startScreenCapture() {
         Log.i(TAG, "Starting screen capture")
         val intent = screenCaptureManager.createCaptureIntent()
-        captureLauncher.launch(intent)
+        startActivityForResult(intent, REQUEST_MEDIA_PROJECTION)
+    }
+
+    /**
+     * Handle activity result for MediaProjection and other requests.
+     */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        when (requestCode) {
+            REQUEST_MEDIA_PROJECTION -> {
+                handleCaptureResult(resultCode, data)
+            }
+        }
     }
 
     /**
      * Handle the result from MediaProjection permission dialog.
      */
-    private fun handleCaptureResult(result: androidx.activity.result.ActivityResult) {
-        if (result.resultCode != RESULT_OK) {
+    private fun handleCaptureResult(resultCode: Int, data: Intent?) {
+        if (resultCode != RESULT_OK || data == null) {
             Log.w(TAG, "Screen capture permission denied")
             Toast.makeText(this, "Screen capture permission required", Toast.LENGTH_SHORT).show()
             finish()
@@ -142,6 +152,7 @@ class GhostActivity : Activity() {
         }
 
         // Start capture
+        val result = androidx.activity.result.ActivityResult(resultCode, data)
         screenCaptureManager.startCapture(result) { bitmap ->
             if (bitmap != null) {
                 Log.i(TAG, "Screen captured successfully")
@@ -187,19 +198,19 @@ class GhostActivity : Activity() {
             bitmap = bitmap,
             query = query,
             onToken = { token ->
-                lifecycleScope.launch {
+                mainScope.launch {
                     _responseText.value += token
                     updateWindowContent()
                 }
             },
             onComplete = {
-                lifecycleScope.launch {
+                mainScope.launch {
                     _isGenerating.value = false
                     updateWindowContent()
                 }
             },
             onError = { error ->
-                lifecycleScope.launch {
+                mainScope.launch {
                     _responseText.value = "Error: $error"
                     _isGenerating.value = false
                     updateWindowContent()

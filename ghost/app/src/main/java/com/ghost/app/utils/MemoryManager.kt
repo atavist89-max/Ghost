@@ -1,6 +1,7 @@
 package com.ghost.app.utils
 
 import android.app.ActivityManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.util.Log
 import java.lang.ref.WeakReference
@@ -69,13 +70,13 @@ object MemoryManager {
      */
     fun trimMemory(context: Context, level: Int) {
         when (level) {
-            Context.TRIM_MEMORY_RUNNING_CRITICAL,
-            Context.TRIM_MEMORY_COMPLETE -> {
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
                 Log.w(TAG, "Critical memory pressure detected")
                 releaseAll()
             }
-            Context.TRIM_MEMORY_RUNNING_LOW,
-            Context.TRIM_MEMORY_MODERATE -> {
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW,
+            ComponentCallbacks2.TRIM_MEMORY_MODERATE -> {
                 Log.i(TAG, "Memory pressure detected, trimming")
                 System.gc()
             }

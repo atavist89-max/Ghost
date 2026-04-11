@@ -106,9 +106,9 @@ class DragHandler(
  * Compose-friendly drag state holder.
  */
 class DragState {
-    var offsetX by androidx.compose.runtime.mutableFloatStateOf(0f)
-    var offsetY by androidx.compose.runtime.mutableFloatStateOf(0f)
-    var isDragging by androidx.compose.runtime.mutableStateOf(false)
+    var offsetX: Float = 0f
+    var offsetY: Float = 0f
+    var isDragging: Boolean = false
 
     private var initialOffsetX = 0f
     private var initialOffsetY = 0f

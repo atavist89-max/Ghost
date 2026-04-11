@@ -62,11 +62,13 @@ android {
 }
 
 dependencies {
-    // TensorFlow Lite (Local LLM inference)
+    // TensorFlow Lite (Local LLM inference) - Using only core, no support library to avoid conflicts
     implementation("org.tensorflow:tensorflow-lite:2.17.0")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.17.0")
-    implementation("org.tensorflow:tensorflow-lite-gpu-api:2.17.0")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    
+    // Activity and lifecycle
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.5")
 
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
