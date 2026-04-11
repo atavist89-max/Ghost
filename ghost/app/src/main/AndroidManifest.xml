@@ -12,9 +12,6 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
-    <!-- MediaProjection permission for Android 16 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-
     <!-- Overlay permission for PiP window -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 

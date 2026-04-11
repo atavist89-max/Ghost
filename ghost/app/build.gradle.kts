@@ -62,10 +62,11 @@ android {
 }
 
 dependencies {
-    // LiteRT-LM (Local LLM inference)
-    implementation("com.google.ai.edge.litert:litert-support-api:1.2.0")
-    implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
-    implementation("com.google.ai.edge.litert:litert-hexagon-npu:1.2.0")
+    // TensorFlow Lite (Local LLM inference)
+    implementation("org.tensorflow:tensorflow-lite:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu-api:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
