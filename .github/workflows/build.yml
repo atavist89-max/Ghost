@@ -38,18 +38,33 @@ jobs:
       working-directory: ./ghost
       run: ./gradlew assembleRelease
       
+    - name: Sign APK with debug key
+      working-directory: ./ghost
+      run: |
+        # Generate debug keystore if not exists
+        if [ ! -f debug.keystore ]; then
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        fi
+        
+        # Sign the APK
+        ${ANDROID_HOME}/build-tools/35.0.0/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --in app/build/outputs/apk/release/app-release-unsigned.apk --out app/build/outputs/apk/release/app-release-signed.apk
+        
+        # Verify signature
+        ${ANDROID_HOME}/build-tools/35.0.0/apksigner verify app/build/outputs/apk/release/app-release-signed.apk
+        echo "✓ APK signed successfully"
+      
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: ghost-apk
-        path: ghost/app/build/outputs/apk/release/*.apk
+        path: ghost/app/build/outputs/apk/release/app-release-signed.apk
         retention-days: 30
         
     - name: Verify APK (no INTERNET permission)
       run: |
         echo "Checking APK permissions..."
         sudo apt-get update && sudo apt-get install -y aapt
-        aapt dump permissions ghost/app/build/outputs/apk/release/app-release-unsigned.apk | grep -i internet && exit 1 || echo "✓ No INTERNET permission found"
+        aapt dump permissions ghost/app/build/outputs/apk/release/app-release-signed.apk | grep -i internet && exit 1 || echo "✓ No INTERNET permission found"
         
     - name: Create Release
       if: github.ref == 'refs/heads/main'
@@ -57,7 +72,7 @@ jobs:
       with:
         tag_name: v1.0.${{ github.run_number }}
         name: Ghost v1.0.${{ github.run_number }}
-        files: ghost/app/build/outputs/apk/release/*.apk
+        files: ghost/app/build/outputs/apk/release/app-release-signed.apk
         draft: true
         prerelease: false
       env:
