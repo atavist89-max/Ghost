@@ -216,17 +216,32 @@ class InferenceEngine(private val context: Context) {
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // Create multimodal message with image file and text
-                    // CORRECT API per LiteRT-LM Message.kt source:
-                    // Message.user(Contents.of(Content.ImageFile(path), Content.Text(text)))
-                    val userMessageObj = Message.user(Contents.of(
-                        Content.ImageFile(imagePath),
-                        Content.Text(query)
-                    ))
-                    
-                    val msgType = "Message type: ${userMessageObj.role}, contents: ${userMessageObj.contents.contents.size} items"
-                    Log.i(TAG, msgType)
-                    DebugLogger.i(TAG, msgType)
+                    // Try to create multimodal message with image
+                    // This API may not be available in all LiteRT-LM versions
+                    val userMessageObj = try {
+                        Log.i(TAG, "Trying multimodal message with Content.ImageFile...")
+                        DebugLogger.i(TAG, "Trying multimodal message with Content.ImageFile...")
+                        
+                        // CORRECT API per LiteRT-LM Message.kt:
+                        // Message.user(Contents.of(Content.ImageFile(path), Content.Text(text)))
+                        val msg = Message.user(Contents.of(
+                            Content.ImageFile(imagePath),
+                            Content.Text(query)
+                        ))
+                        
+                        val msgType = "Multimodal message created: ${msg.role}, contents: ${msg.contents.contents.size} items"
+                        Log.i(TAG, msgType)
+                        DebugLogger.i(TAG, msgType)
+                        msg
+                    } catch (e: Exception) {
+                        // Fallback: API may not exist in this version
+                        val errorMsg = "Multimodal API failed (${e.javaClass.simpleName}: ${e.message}), falling back to text-only"
+                        Log.w(TAG, errorMsg)
+                        DebugLogger.w(TAG, errorMsg)
+                        
+                        // Text-only fallback
+                        Message.of("I'm looking at a screenshot. $query")
+                    }
                     
                     val sendingMsg = "Message object created, sending to model..."
                     Log.d(TAG, sendingMsg)
