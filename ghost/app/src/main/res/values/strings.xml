@@ -33,4 +33,9 @@
     <string name="status_listening">Listening…</string>
     <string name="drag_to_move">Drag to move</string>
     <string name="swipe_to_close">Swipe off screen to close</string>
+    
+    <!-- Accessibility Service -->
+    <string name="ghost_accessibility_description">Ghost analyzes your screen to answer questions about what you see. Screen content is processed locally and never stored.</string>
+    <string name="accessibility_service_not_enabled">Ghost needs Accessibility permission to analyze your screen silently</string>
+    <string name="accessibility_service_connecting">Service connecting, try again in 2 seconds</string>
 </resources>

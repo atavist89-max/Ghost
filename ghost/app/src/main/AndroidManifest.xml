@@ -12,17 +12,8 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
-    <!-- MediaProjection requires foreground service on Android 10+ -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    
-    <!-- Some Samsung devices require this for screen capture -->
-    <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT"
-        tools:ignore="ProtectedPermissions" />
-
-    <!-- Overlay permission for PiP window -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- AccessibilityService for silent screenshots (replaces MediaProjection) -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
     <application
         android:name=".GhostApplication"
@@ -32,11 +23,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Ghost"
-        android:excludeFromRecents="true"
-        android:persistent="false"
         android:hardwareAccelerated="true"
         tools:targetApi="36">
 
+        <!-- Launcher Activity - transparent, captures screen and launches ChatActivity -->
         <activity
             android:name=".GhostActivity"
             android:exported="true"
@@ -56,12 +46,26 @@
             </intent-filter>
         </activity>
 
-        <!-- Foreground service for MediaProjection (required Android 10+) -->
-        <service
-            android:name=".capture.ScreenCaptureService"
-            android:enabled="true"
+        <!-- Chat Activity - Full screen chat interface -->
+        <activity
+            android:name=".ChatActivity"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:theme="@style/Theme.Ghost.Chat"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+
+        <!-- AccessibilityService for silent screenshot capture (replaces MediaProjection) -->
+        <service
+            android:name=".GhostAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:label="Ghost Screen Analysis">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/ghost_accessibility_config" />
+        </service>
 
     </application>
 

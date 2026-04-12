@@ -3,6 +3,8 @@ package com.ghost.app.utils
 import android.app.ActivityManager
 import android.content.ComponentCallbacks2
 import android.content.Context
+import android.graphics.Bitmap
+import android.hardware.HardwareBuffer
 import android.util.Log
 import java.lang.ref.WeakReference
 
@@ -106,5 +108,29 @@ object MemoryManager {
     fun clearImageCaches() {
         // Placeholder for image cache cleanup
         // Currently we don't cache bitmaps, but this allows for future optimization
+    }
+
+    /**
+     * Destroy screenshot resources including HardwareBuffer.
+     * Critical for AccessibilityService screenshots to prevent native memory leaks.
+     * 
+     * @param bitmap The bitmap to recycle (optional)
+     * @param hardwareBuffer The HardwareBuffer to close (optional)
+     */
+    fun destroyScreenshot(bitmap: Bitmap?, hardwareBuffer: HardwareBuffer?) {
+        hardwareBuffer?.let {
+            try {
+                it.close()
+                Log.d(TAG, "HardwareBuffer closed")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error closing HardwareBuffer", e)
+            }
+        }
+        bitmap?.let {
+            if (!it.isRecycled) {
+                it.recycle()
+                Log.d(TAG, "Bitmap recycled")
+            }
+        }
     }
 }
