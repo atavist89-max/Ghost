@@ -153,7 +153,7 @@ class GhostActivity : Activity() {
 
         // Start capture
         val result = androidx.activity.result.ActivityResult(resultCode, data)
-        screenCaptureManager.startCapture(result) { bitmap ->
+        screenCaptureManager.startCapture(this, result) { bitmap ->
             if (bitmap != null) {
                 Log.i(TAG, "Screen captured successfully")
                 capturedBitmap = bitmap
@@ -241,7 +241,7 @@ class GhostActivity : Activity() {
         windowManager.closeWindow()
 
         // Stop capture if still running
-        screenCaptureManager.stopCapture()
+        screenCaptureManager.stopCapture(this)
 
         // Release inference engine
         inferenceEngine?.close()
@@ -277,7 +277,7 @@ class GhostActivity : Activity() {
         }
 
         // Ensure capture is stopped
-        screenCaptureManager.stopCapture()
+        screenCaptureManager.stopCapture(this)
 
         // Recycle bitmap
         capturedBitmap?.recycle()
