@@ -18,6 +18,14 @@
         <item name="android:windowContentOverlay">@null</item>
     </style>
 
+    <!-- Chat Activity theme - Full screen with action bar -->
+    <style name="Theme.Ghost.Chat" parent="android:Theme.Material.Light.DarkActionBar">
+        <item name="android:windowBackground">@android:color/background_dark</item>
+        <item name="android:colorPrimary">@android:color/holo_green_dark</item>
+        <item name="android:colorPrimaryDark">@android:color/black</item>
+        <item name="android:colorAccent">@android:color/holo_green_light</item>
+    </style>
+
     <!-- Window animations -->
     <style name="Animation.Ghost" parent="android:Animation">
         <item name="android:windowEnterAnimation">@anim/fade_in</item>
