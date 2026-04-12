@@ -2,7 +2,7 @@ name: Build Ghost APK
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, feature/debug-panel ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
