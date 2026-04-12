@@ -6,8 +6,6 @@ import android.util.Log
 import com.ghost.app.utils.DebugLogger
 import com.ghost.app.utils.GhostPaths
 import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Content
-import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
@@ -216,32 +214,18 @@ class InferenceEngine(private val context: Context) {
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // Try to create multimodal message with image
-                    // This API may not be available in all LiteRT-LM versions
-                    val userMessageObj = try {
-                        Log.i(TAG, "Trying multimodal message with Content.ImageFile...")
-                        DebugLogger.i(TAG, "Trying multimodal message with Content.ImageFile...")
-                        
-                        // CORRECT API per LiteRT-LM Message.kt:
-                        // Message.user(Contents.of(Content.ImageFile(path), Content.Text(text)))
-                        val msg = Message.user(Contents.of(
-                            Content.ImageFile(imagePath),
-                            Content.Text(query)
-                        ))
-                        
-                        val msgType = "Multimodal message created: ${msg.role}, contents: ${msg.contents.contents.size} items"
-                        Log.i(TAG, msgType)
-                        DebugLogger.i(TAG, msgType)
-                        msg
-                    } catch (e: Exception) {
-                        // Fallback: API may not exist in this version
-                        val errorMsg = "Multimodal API failed (${e.javaClass.simpleName}: ${e.message}), falling back to text-only"
-                        Log.w(TAG, errorMsg)
-                        DebugLogger.w(TAG, errorMsg)
-                        
-                        // Text-only fallback
-                        Message.of("I'm looking at a screenshot. $query")
-                    }
+                    // NOTE: Vision/multimodal support requires LiteRT-LM APIs that may not be 
+                    // available in v0.10.0. The Content.ImageFile API exists in newer versions.
+                    // For now, using text-only mode. Vision support would require:
+                    // 1. Upgrading to newer LiteRT-LM version, OR
+                    // 2. Using JNI to call C++ multimodal APIs directly
+                    
+                    Log.i(TAG, "Creating text message (vision API not available in v0.10.0)")
+                    DebugLogger.i(TAG, "Creating text message (vision API not available in v0.10.0)")
+                    DebugLogger.i(TAG, "Image was saved to: $imagePath but cannot be passed to model in this version")
+                    
+                    // Text-only message
+                    val userMessageObj = Message.of("I have a screenshot of my screen. $query")
                     
                     val sendingMsg = "Message object created, sending to model..."
                     Log.d(TAG, sendingMsg)
