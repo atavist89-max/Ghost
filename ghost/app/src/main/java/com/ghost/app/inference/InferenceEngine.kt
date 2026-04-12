@@ -6,6 +6,8 @@ import android.util.Log
 import com.ghost.app.utils.DebugLogger
 import com.ghost.app.utils.GhostPaths
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
@@ -207,20 +209,24 @@ class InferenceEngine(private val context: Context) {
                 Log.i(TAG, imageSavedMsg)
                 DebugLogger.i(TAG, imageSavedMsg)
 
-                // Build vision prompt with image token
-                // Gemma3/4 template format with <image_soft_token> or <|image|>
-                val visionPrompt = buildVisionPrompt(query, imagePath)
-                
-                val promptMsg = "Sending vision prompt: ${visionPrompt.take(200)}..."
-                Log.i(TAG, promptMsg)
-                DebugLogger.i(TAG, promptMsg)
+                Log.i(TAG, "Creating multimodal message with image: $imagePath")
+                DebugLogger.i(TAG, "Creating multimodal message with image: $imagePath")
 
                 // Create a conversation
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // Send message - Message.of() accepts the prompt string
-                    val userMessageObj = Message.of(visionPrompt)
+                    // Create multimodal message with image file and text
+                    // CORRECT API per LiteRT-LM Message.kt source:
+                    // Message.user(Contents.of(Content.ImageFile(path), Content.Text(text)))
+                    val userMessageObj = Message.user(Contents.of(
+                        Content.ImageFile(imagePath),
+                        Content.Text(query)
+                    ))
+                    
+                    val msgType = "Message type: ${userMessageObj.role}, contents: ${userMessageObj.contents.contents.size} items"
+                    Log.i(TAG, msgType)
+                    DebugLogger.i(TAG, msgType)
                     
                     val sendingMsg = "Message object created, sending to model..."
                     Log.d(TAG, sendingMsg)
