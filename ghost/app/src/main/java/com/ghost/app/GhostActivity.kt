@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import com.ghost.app.capture.ScreenCaptureManager
@@ -55,13 +56,11 @@ class GhostActivity : Activity() {
 
         // Check permissions first
         if (!checkAndRequestPermissions()) {
-            finish()
             return
         }
 
         // Validate model file
         if (!validateModel()) {
-            finish()
             return
         }
 
@@ -77,17 +76,36 @@ class GhostActivity : Activity() {
 
         if (!hasStorage) {
             Log.i(TAG, "Requesting MANAGE_EXTERNAL_STORAGE permission")
-            return PermissionChecker.requestManageExternalStorage(this)
+            val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            Toast.makeText(this, "Please enable 'All files access' for Ghost", Toast.LENGTH_LONG).show()
+            finish()
+            return false
         }
 
         if (!hasOverlay) {
             Log.i(TAG, "Requesting SYSTEM_ALERT_WINDOW permission")
-            return PermissionChecker.requestOverlayPermission(this)
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                data = android.net.Uri.parse("package:$packageName")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            Toast.makeText(this, "Please enable 'Appear on top' for Ghost", Toast.LENGTH_LONG).show()
+            finish()
+            return false
         }
-        
+
         if (!hasNotifications) {
             Log.i(TAG, "Requesting POST_NOTIFICATIONS permission")
-            return PermissionChecker.requestNotificationPermission(this)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                requestPermissions(
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    1003
+                )
+            }
+            return false
         }
 
         return true
@@ -137,6 +155,7 @@ class GhostActivity : Activity() {
      */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        Log.d(TAG, "onActivityResult: requestCode=$requestCode, resultCode=$resultCode")
         
         when (requestCode) {
             REQUEST_MEDIA_PROJECTION -> {
@@ -149,9 +168,18 @@ class GhostActivity : Activity() {
      * Handle the result from MediaProjection permission dialog.
      */
     private fun handleCaptureResult(resultCode: Int, data: Intent?) {
-        if (resultCode != RESULT_OK || data == null) {
-            Log.w(TAG, "Screen capture permission denied")
+        Log.d(TAG, "handleCaptureResult: resultCode=$resultCode, data=$data")
+        
+        if (resultCode != RESULT_OK) {
+            Log.w(TAG, "Screen capture permission denied or cancelled")
             Toast.makeText(this, "Screen capture permission required", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
+        if (data == null) {
+            Log.e(TAG, "Screen capture result data is null")
+            Toast.makeText(this, "Screen capture failed: no data", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -164,7 +192,7 @@ class GhostActivity : Activity() {
                 capturedBitmap = bitmap
                 showGhostWindow()
             } else {
-                Log.e(TAG, "Failed to capture screen")
+                Log.e(TAG, "Failed to capture screen - bitmap is null")
                 Toast.makeText(this, "Failed to capture screen", Toast.LENGTH_SHORT).show()
                 finish()
             }
@@ -205,35 +233,20 @@ class GhostActivity : Activity() {
             onToken = { token ->
                 mainScope.launch {
                     _responseText.value += token
-                    updateWindowContent()
                 }
             },
             onComplete = {
                 mainScope.launch {
                     _isGenerating.value = false
-                    updateWindowContent()
                 }
             },
             onError = { error ->
                 mainScope.launch {
                     _responseText.value = "Error: $error"
                     _isGenerating.value = false
-                    updateWindowContent()
                 }
             }
         )
-    }
-
-    /**
-     * Update window content with current state.
-     */
-    private fun updateWindowContent() {
-        // Recreate window with updated state
-        // In a production app, we'd use a proper state management solution
-        if (windowManager.isShowing()) {
-            // For now, we rely on the next query to update
-            // A more sophisticated approach would use a ViewModel
-        }
     }
 
     /**

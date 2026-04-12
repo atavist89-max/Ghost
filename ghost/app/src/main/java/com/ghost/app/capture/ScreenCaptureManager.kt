@@ -1,5 +1,6 @@
 package com.ghost.app.capture
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -11,7 +12,6 @@ import android.media.projection.MediaProjectionManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.Surface
 import androidx.activity.result.ActivityResult
 
 /**
@@ -26,7 +26,7 @@ class ScreenCaptureManager(context: Context) {
         // Capture dimensions - 1280x720 for performance
         private const val CAPTURE_WIDTH = 1280
         private const val CAPTURE_HEIGHT = 720
-        private const val CAPTURE_DPI = 160
+        private const val CAPTURE_DPI = 1
 
         // ImageReader configuration
         private const val MAX_IMAGES = 2
@@ -53,14 +53,14 @@ class ScreenCaptureManager(context: Context) {
      * Starts the screen capture process.
      * Captures exactly one frame and returns it via callback.
      *
-     * @param context Context to start foreground service
+     * @param activity Activity context
      * @param result ActivityResult from MediaProjection permission dialog
      * @param onCapture Callback with captured bitmap (null if failed)
      */
-    fun startCapture(context: Context, result: ActivityResult, onCapture: (Bitmap?) -> Unit) {
+    fun startCapture(activity: Activity, result: ActivityResult, onCapture: (Bitmap?) -> Unit) {
         Log.d(TAG, "startCapture called with resultCode: ${result.resultCode}")
         
-        if (result.resultCode != android.app.Activity.RESULT_OK) {
+        if (result.resultCode != Activity.RESULT_OK) {
             Log.w(TAG, "MediaProjection permission denied, resultCode: ${result.resultCode}")
             onCapture(null)
             return
@@ -73,39 +73,29 @@ class ScreenCaptureManager(context: Context) {
         }
 
         try {
-            // Start foreground service (required for Android 10+)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                Log.d(TAG, "Starting foreground service for MediaProjection")
-                val serviceIntent = Intent(context, ScreenCaptureService::class.java).apply {
-                    action = ScreenCaptureService.ACTION_START
-                }
-                context.startForegroundService(serviceIntent)
-                // Give service time to start
-                Thread.sleep(100)
-            }
-
             // Initialize MediaProjection
             Log.d(TAG, "Creating MediaProjection")
             mediaProjection = mediaProjectionManager.getMediaProjection(result.resultCode, result.data!!)
             
             if (mediaProjection == null) {
                 Log.e(TAG, "MediaProjection is null after creation")
-                stopCapture(context)
+                stopCapture()
                 onCapture(null)
                 return
             }
             
-            Log.d(TAG, "MediaProjection created successfully")
-            
-            // Register MediaProjection callback
+            // Register callback
             mediaProjection?.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
-                    Log.w(TAG, "MediaProjection stopped")
-                    stopCapture(context)
+                    Log.w(TAG, "MediaProjection stopped by system")
+                    stopCapture()
                 }
             }, mainHandler)
+            
+            Log.d(TAG, "MediaProjection created successfully")
 
             // Create ImageReader for capturing frames
+            Log.d(TAG, "Creating ImageReader: ${CAPTURE_WIDTH}x${CAPTURE_HEIGHT}")
             imageReader = ImageReader.newInstance(
                 CAPTURE_WIDTH,
                 CAPTURE_HEIGHT,
@@ -113,8 +103,38 @@ class ScreenCaptureManager(context: Context) {
                 MAX_IMAGES
             )
 
-            // Create VirtualDisplay BEFORE setting listener to ensure it's ready
-            Log.d(TAG, "Creating VirtualDisplay: ${CAPTURE_WIDTH}x${CAPTURE_HEIGHT}")
+            // Set up image available listener
+            imageReader?.setOnImageAvailableListener({ reader ->
+                Log.d(TAG, "Image available from ImageReader")
+                try {
+                    val image = reader.acquireLatestImage()
+                    if (image != null) {
+                        Log.d(TAG, "Image acquired, converting to bitmap")
+                        val bitmap = BitmapConverter.imageToBitmap(image)
+                        image.close()
+
+                        // Stop capture immediately after getting one frame
+                        stopCapture()
+
+                        // Return bitmap on main thread
+                        mainHandler.post {
+                            Log.d(TAG, "Returning captured bitmap")
+                            onCapture(bitmap)
+                        }
+                    } else {
+                        Log.w(TAG, "acquireLatestImage returned null")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing captured image: ${e.message}", e)
+                    stopCapture()
+                    mainHandler.post {
+                        onCapture(null)
+                    }
+                }
+            }, mainHandler)
+
+            // Create VirtualDisplay
+            Log.d(TAG, "Creating VirtualDisplay")
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "GhostScreenCapture",
                 CAPTURE_WIDTH,
@@ -128,96 +148,63 @@ class ScreenCaptureManager(context: Context) {
             
             if (virtualDisplay == null) {
                 Log.e(TAG, "VirtualDisplay is null after creation")
-                stopCapture(context)
+                stopCapture()
                 onCapture(null)
                 return
             }
             
             Log.d(TAG, "VirtualDisplay created successfully")
+            Log.d(TAG, "Screen capture started, waiting for frame...")
 
-            // Set up image available listener
-            imageReader?.setOnImageAvailableListener({ reader ->
-                try {
-                    val image = reader.acquireLatestImage()
-                    if (image != null) {
-                        val bitmap = BitmapConverter.imageToBitmap(image)
-                        image.close()
-
-                        // Stop capture immediately after getting one frame
-                        stopCapture(context)
-
-                        // Return bitmap on main thread
-                        mainHandler.post {
-                            onCapture(bitmap)
-                        }
-                    } else {
-                        // No image available yet, wait for next frame
-                        Log.d(TAG, "No image available yet, waiting...")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error processing captured image", e)
-                    stopCapture(context)
+            // Add timeout
+            mainHandler.postDelayed({
+                if (virtualDisplay != null) {
+                    Log.e(TAG, "Screen capture timeout - no frame received within 3 seconds")
+                    stopCapture()
                     mainHandler.post {
                         onCapture(null)
                     }
                 }
-            }, mainHandler)
-
-            // Add timeout in case no frame is captured
-            mainHandler.postDelayed({
-                if (virtualDisplay != null) {
-                    Log.e(TAG, "Screen capture timeout - no frame received")
-                    stopCapture(context)
-                    onCapture(null)
-                }
-            }, 5000) // 5 second timeout
-
-            Log.d(TAG, "Screen capture started")
+            }, 3000)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start screen capture", e)
-            stopCapture(context)
+            Log.e(TAG, "Failed to start screen capture: ${e.message}", e)
+            stopCapture()
             onCapture(null)
         }
     }
 
     /**
      * Stops the screen capture and releases all resources.
-     * This should be called as soon as the frame is captured.
      */
-    fun stopCapture(context: Context? = null) {
+    fun stopCapture() {
         Log.d(TAG, "Stopping screen capture")
 
-        // Remove any pending timeout callbacks
+        // Remove any pending callbacks
         mainHandler.removeCallbacksAndMessages(null)
 
         try {
             virtualDisplay?.release()
             virtualDisplay = null
+            Log.d(TAG, "VirtualDisplay released")
         } catch (e: Exception) {
-            Log.e(TAG, "Error releasing virtual display", e)
+            Log.e(TAG, "Error releasing virtual display: ${e.message}")
         }
 
         try {
             imageReader?.close()
             imageReader = null
+            Log.d(TAG, "ImageReader closed")
         } catch (e: Exception) {
-            Log.e(TAG, "Error closing image reader", e)
+            Log.e(TAG, "Error closing image reader: ${e.message}")
         }
 
         try {
             mediaProjection?.stop()
             mediaProjection = null
+            Log.d(TAG, "MediaProjection stopped")
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping media projection", e)
-        }
-
-        // Stop foreground service
-        context?.let {
-            val serviceIntent = Intent(it, ScreenCaptureService::class.java).apply {
-                action = ScreenCaptureService.ACTION_STOP
-            }
-            it.startService(serviceIntent)
+            Log.e(TAG, "Error stopping media projection: ${e.message}")
         }
 
         Log.d(TAG, "Screen capture stopped and resources released")

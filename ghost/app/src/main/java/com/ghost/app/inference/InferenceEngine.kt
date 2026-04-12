@@ -74,13 +74,13 @@ class InferenceEngine(private val context: Context) {
                 thermalMonitor.checkThermalStatus()
                 
                 // Select backend based on thermal state
-                // Backend.GPU and Backend.CPU are classes that need instantiation
+                // Use lowercase factory methods from LiteRT-LM API
                 val backend = if (thermalMonitor.shouldUseGpu()) {
                     Log.i(TAG, "Using GPU backend")
-                    Backend.GPU()
+                    Backend.gpu()
                 } else {
                     Log.i(TAG, "Using CPU backend")
-                    Backend.CPU()
+                    Backend.cpu()
                 }
 
                 // Create engine configuration
