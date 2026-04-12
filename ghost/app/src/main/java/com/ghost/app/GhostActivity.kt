@@ -17,7 +17,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Main entry point for Ghost application.
@@ -45,70 +44,91 @@ class GhostActivity : Activity() {
 
     // Captured screen state
     private var capturedBitmap: Bitmap? = null
+    
+    // Track initialization state
+    private var isInitialized = false
+    private var permissionsRequested = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
-
+        
         // Initialize managers
         screenCaptureManager = ScreenCaptureManager(this)
         windowManager = GhostWindowManager(this)
-
-        // Check permissions first
-        if (!checkAndRequestPermissions()) {
-            return
-        }
-
-        // Validate model file
-        if (!validateModel()) {
-            return
-        }
-
-        // Initialize inference engine
-        initializeInferenceEngine()
     }
-
+    
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "onResume, isInitialized=$isInitialized, permissionsRequested=$permissionsRequested")
+        
+        // Check and request permissions on resume (handles return from settings)
+        if (!isInitialized) {
+            checkPermissionsAndProceed()
+        }
+    }
+    
     /**
-     * Check and request required permissions.
+     * Check permissions and proceed with initialization
      */
-    private fun checkAndRequestPermissions(): Boolean {
+    private fun checkPermissionsAndProceed() {
         val (hasStorage, hasOverlay, hasNotifications) = PermissionChecker.checkAllPermissions(this)
+        
+        Log.d(TAG, "Permissions: storage=$hasStorage, overlay=$hasOverlay, notifications=$hasNotifications")
 
         if (!hasStorage) {
-            Log.i(TAG, "Requesting MANAGE_EXTERNAL_STORAGE permission")
-            val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            if (!permissionsRequested) {
+                Log.i(TAG, "Requesting MANAGE_EXTERNAL_STORAGE permission")
+                permissionsRequested = true
+                Toast.makeText(this, "Please enable 'All files access' for Ghost", Toast.LENGTH_LONG).show()
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
             }
-            startActivity(intent)
-            Toast.makeText(this, "Please enable 'All files access' for Ghost", Toast.LENGTH_LONG).show()
-            finish()
-            return false
+            return  // Don't finish, wait for user to return
         }
 
         if (!hasOverlay) {
-            Log.i(TAG, "Requesting SYSTEM_ALERT_WINDOW permission")
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
-                data = android.net.Uri.parse("package:$packageName")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            if (!permissionsRequested) {
+                Log.i(TAG, "Requesting SYSTEM_ALERT_WINDOW permission")
+                permissionsRequested = true
+                Toast.makeText(this, "Please enable 'Appear on top' for Ghost", Toast.LENGTH_LONG).show()
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
             }
-            startActivity(intent)
-            Toast.makeText(this, "Please enable 'Appear on top' for Ghost", Toast.LENGTH_LONG).show()
-            finish()
-            return false
+            return  // Don't finish, wait for user to return
         }
 
         if (!hasNotifications) {
-            Log.i(TAG, "Requesting POST_NOTIFICATIONS permission")
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                Log.i(TAG, "Requesting POST_NOTIFICATIONS permission")
                 requestPermissions(
                     arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
                     1003
                 )
             }
-            return false
+            return
         }
-
-        return true
+        
+        // All permissions granted, reset flag and proceed
+        permissionsRequested = false
+        
+        // Validate model file
+        if (!validateModel()) {
+            Log.e(TAG, "Model validation failed")
+            finish()
+            return
+        }
+        
+        // Start screen capture (this is the first step after permissions)
+        if (!isInitialized) {
+            isInitialized = true
+            startScreenCapture()
+        }
     }
 
     /**
@@ -116,29 +136,6 @@ class GhostActivity : Activity() {
      */
     private fun validateModel(): Boolean {
         return ModelValidator.validateModelWithFeedback(this)
-    }
-
-    /**
-     * Initialize the inference engine.
-     */
-    private fun initializeInferenceEngine() {
-        inferenceEngine = InferenceEngine(this).apply {
-            initialize { success, error ->
-                if (success) {
-                    Log.i(TAG, "Inference engine ready")
-                    // Start screen capture after engine is ready
-                    startScreenCapture()
-                } else {
-                    Log.e(TAG, "Failed to initialize inference: $error")
-                    Toast.makeText(
-                        this@GhostActivity,
-                        "Failed to load model: $error",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    finish()
-                }
-            }
-        }
     }
 
     /**
@@ -190,11 +187,34 @@ class GhostActivity : Activity() {
             if (bitmap != null) {
                 Log.i(TAG, "Screen captured successfully")
                 capturedBitmap = bitmap
-                showGhostWindow()
+                // Now initialize inference engine and show window
+                initializeInferenceEngine()
             } else {
                 Log.e(TAG, "Failed to capture screen - bitmap is null")
                 Toast.makeText(this, "Failed to capture screen", Toast.LENGTH_SHORT).show()
                 finish()
+            }
+        }
+    }
+    
+    /**
+     * Initialize the inference engine AFTER screen capture.
+     */
+    private fun initializeInferenceEngine() {
+        inferenceEngine = InferenceEngine(this).apply {
+            initialize { success, error ->
+                if (success) {
+                    Log.i(TAG, "Inference engine ready")
+                    showGhostWindow()
+                } else {
+                    Log.e(TAG, "Failed to initialize inference: $error")
+                    Toast.makeText(
+                        this@GhostActivity,
+                        "Failed to load model: $error",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    finish()
+                }
             }
         }
     }
@@ -259,7 +279,7 @@ class GhostActivity : Activity() {
         windowManager.closeWindow()
 
         // Stop capture if still running
-        screenCaptureManager.stopCapture(this)
+        screenCaptureManager.stopCapture()
 
         // Release inference engine
         inferenceEngine?.close()
@@ -295,7 +315,7 @@ class GhostActivity : Activity() {
         }
 
         // Ensure capture is stopped
-        screenCaptureManager.stopCapture(this)
+        screenCaptureManager.stopCapture()
 
         // Recycle bitmap
         capturedBitmap?.recycle()
