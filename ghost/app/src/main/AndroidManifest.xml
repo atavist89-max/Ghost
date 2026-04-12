@@ -45,12 +45,16 @@
             </intent-filter>
         </activity>
 
-        <!-- Chat Activity - Full screen chat interface -->
+        <!-- Chat Activity - PiP overlay mode (transparent, not full-screen) -->
         <activity
             android:name=".ChatActivity"
             android:exported="false"
             android:theme="@style/Theme.Ghost.Chat"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- AccessibilityService for silent screenshot capture (replaces MediaProjection) -->
         <service

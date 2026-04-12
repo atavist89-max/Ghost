@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Base application theme - Dark translucent -->
+    <!-- Base application theme - Dark translucent for PiP overlay -->
     <style name="Theme.Ghost" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowAnimationStyle">@style/Animation.Ghost</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowContentOverlay">@null</item>
     </style>
 
-    <!-- Transparent theme for GhostActivity -->
+    <!-- Transparent theme for GhostActivity - entry point -->
     <style name="Theme.Ghost.Transparent" parent="Theme.Ghost">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
@@ -18,18 +21,13 @@
         <item name="android:windowContentOverlay">@null</item>
     </style>
 
-    <!-- Chat Activity theme - Full screen with action bar -->
-    <style name="Theme.Ghost.Chat" parent="android:Theme.Material.Light.DarkActionBar">
-        <item name="android:windowBackground">@android:color/background_dark</item>
-        <item name="android:colorPrimary">@android:color/holo_green_dark</item>
-        <item name="android:colorPrimaryDark">@android:color/black</item>
-        <item name="android:colorAccent">@android:color/holo_green_light</item>
-    </style>
-
-    <!-- Window animations -->
-    <style name="Animation.Ghost" parent="android:Animation">
-        <item name="android:windowEnterAnimation">@anim/fade_in</item>
-        <item name="android:windowExitAnimation">@anim/fade_out</item>
+    <!-- Chat Activity theme - Transparent for PiP overlay (not full-screen) -->
+    <style name="Theme.Ghost.Chat" parent="Theme.Ghost">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowContentOverlay">@null</item>
     </style>
 
 </resources>

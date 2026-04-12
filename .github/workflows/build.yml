@@ -2,7 +2,7 @@ name: Build Ghost APK
 
 on:
   push:
-    branches: [ main, develop, feature/debug-panel ]
+    branches: [ main, develop, feature/pip-cyberpunk-ui ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -56,9 +56,9 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: ghost-apk
+        name: ghost-pip-ui-apk
         path: ghost/app/build/outputs/apk/release/app-release-signed.apk
-        retention-days: 30
+        retention-days: 7
         
     - name: Verify APK (no INTERNET permission)
       run: |

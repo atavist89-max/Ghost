@@ -1,61 +1,72 @@
 package com.ghost.app.ui
 
 import android.graphics.Bitmap
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import com.ghost.app.R
+import com.ghost.app.BuildConfig
+import com.ghost.app.ui.theme.GhostColors
 
-// Phosphor Green colors
+// Phosphor Green Cyberpunk Colors
 private val PhosphorGreen = Color(0xFF39FF14)
-private val PhosphorGreenDim = Color(0xFF1A800A)
-private val DarkBackground = Color(0xFF0A0A0A)
-private val DarkSurface = Color(0xFF141414)
-private val DarkSurfaceVariant = Color(0xFF1E1E1E)
-private val TextPrimary = Color.White
-private val TextSecondary = Color(0xFFB3B3B3)
+private val PhosphorDim = Color(0xFF2B8C1A)
+private val PhosphorBright = Color(0xFF5FFF3F)
+private val GunmetalBg = Color(0xFF0A0F0A)
+private val GunmetalSurface = Color(0xFF141414)
+private val GunmetalSurfaceVariant = Color(0xFF1A1A1A)
+private val TextPhosphor = Color(0xFFE0FFE0)
+private val TextPhosphorDim = Color(0xFF8FBC8F)
+private val BorderPhosphor = Color(0xFF39FF14)
 
 /**
- * Ghost PiP UI Component.
- * Provides the floating window interface for interacting with the LLM.
+ * Ghost PiP UI Component - Cyberpunk Terminal Aesthetic
+ * 
+ * Features:
+ * - Phosphor green text on gunmetal background
+ * - CRT scanline overlay effect
+ * - Spring physics slide-in from right
+ * - Expandable screenshot thumbnail
+ * - Monospace typography throughout
  */
 @Composable
 fun GhostInterface(
     capturedBitmap: Bitmap?,
     responseText: String,
     isGenerating: Boolean,
+    isEngineReady: Boolean = false,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
-    onBitmapClick: () -> Unit = {}
+    onDebugClick: () -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
@@ -63,79 +74,174 @@ fun GhostInterface(
 
     // Auto-scroll to bottom when new text arrives
     LaunchedEffect(responseText) {
-        scrollState.animateScrollTo(scrollState.maxValue)
+        if (responseText.isNotEmpty()) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
     }
+    
+    // Pulsing animation for processing state
+    val pulseAnimation by animateFloatAsState(
+        targetValue = if (isGenerating) 1.0f else 0.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground.copy(alpha = 0.95f))
-            .padding(8.dp)
+            .padding(4.dp)
     ) {
-        // Header with close button
-        GhostHeader(onClose = onClose)
+        // Main container with CRT effect
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(6.dp))
+                .background(GunmetalBg.copy(alpha = 0.95f))
+                .drawBehind { drawPhosphorGlow() }
+                .drawWithContent {
+                    drawContent()
+                    drawScanlines()
+                }
+                .padding(12.dp)
+        ) {
+            // Header bar with phosphor border
+            GhostHeader(
+                onClose = onClose,
+                onDebugClick = onDebugClick,
+                isGenerating = isGenerating,
+                pulseAlpha = if (isGenerating) pulseAnimation else 0.7f
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Phosphor divider line
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(BorderPhosphor.copy(alpha = 0.5f))
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
 
-        // Screenshot thumbnail
-        capturedBitmap?.let { bitmap ->
-            GhostThumbnail(
-                bitmap = bitmap,
-                isExpanded = isExpanded,
-                onClick = { isExpanded = !isExpanded }
+            // Screenshot thumbnail
+            capturedBitmap?.let { bitmap ->
+                GhostThumbnail(
+                    bitmap = bitmap,
+                    isExpanded = isExpanded,
+                    onClick = { isExpanded = !isExpanded }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Response area with scrollable text
+            GhostResponseArea(
+                responseText = responseText,
+                isGenerating = isGenerating,
+                isEngineReady = isEngineReady,
+                scrollState = scrollState,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Input area at bottom
+            GhostInputArea(
+                query = query,
+                onQueryChange = { query = it },
+                onSend = {
+                    if (query.isNotBlank()) {
+                        onSendQuery(query)
+                        query = ""
+                    }
+                },
+                enabled = !isGenerating && isEngineReady
             )
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Response area
-        GhostResponseArea(
-            responseText = responseText,
-            isGenerating = isGenerating,
-            scrollState = scrollState
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Input area
-        GhostInputArea(
-            query = query,
-            onQueryChange = { query = it },
-            onSend = {
-                if (query.isNotBlank()) {
-                    onSendQuery(query)
-                    query = ""
-                }
-            },
-            enabled = !isGenerating
-        )
     }
 }
 
 @Composable
-private fun GhostHeader(onClose: () -> Unit) {
+private fun GhostHeader(
+    onClose: () -> Unit,
+    onDebugClick: () -> Unit,
+    isGenerating: Boolean,
+    pulseAlpha: Float
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .height(48.dp)
+            .padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "GHOST",
-            color = PhosphorGreen,
-            fontSize = 16.sp,
-            letterSpacing = 2.sp
-        )
-
-        IconButton(
-            onClick = onClose,
-            modifier = Modifier.size(32.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close",
-                tint = TextSecondary,
-                modifier = Modifier.size(20.dp)
+        // Title with phosphor glow
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Status indicator dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        if (isGenerating) PhosphorGreen.copy(alpha = pulseAlpha) else PhosphorDim
+                    )
             )
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            Text(
+                text = "GHOST",
+                color = PhosphorGreen,
+                fontSize = 16.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp
+            )
+            
+            if (isGenerating) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "PROCESSING...",
+                    color = PhosphorDim,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Debug button (only in debug builds)
+            if (BuildConfig.DEBUG) {
+                IconButton(
+                    onClick = onDebugClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Debug",
+                        tint = TextPhosphorDim,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            
+            // Close button
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = PhosphorGreen,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
     }
 }
@@ -146,14 +252,23 @@ private fun GhostThumbnail(
     isExpanded: Boolean,
     onClick: () -> Unit
 ) {
-    val targetHeight = if (isExpanded) 200.dp else 80.dp
+    val targetHeight = if (isExpanded) 180.dp else 70.dp
+    val borderAlpha = if (isExpanded) 1.0f else 0.3f
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp, max = targetHeight)
-            .clip(RoundedCornerShape(8.dp))
-            .background(DarkSurfaceVariant)
+            .heightIn(min = 50.dp, max = targetHeight)
+            .clip(RoundedCornerShape(6.dp))
+            .background(GunmetalSurfaceVariant)
+            .drawBehind {
+                // Phosphor border glow
+                drawRect(
+                    color = BorderPhosphor.copy(alpha = borderAlpha),
+                    topLeft = Offset(0f, 0f),
+                    size = Size(size.width, 1.dp.toPx())
+                )
+            }
             .clickable(onClick = onClick)
             .padding(4.dp)
     ) {
@@ -165,16 +280,20 @@ private fun GhostThumbnail(
                 .clip(RoundedCornerShape(4.dp))
         )
 
-        // Expand indicator
-        if (!isExpanded) {
+        // Expand/collapse indicator
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .clip(RoundedCornerShape(4.dp))
+                .background(GunmetalBg.copy(alpha = 0.8f))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
             Text(
-                text = "Tap to expand",
-                color = TextSecondary.copy(alpha = 0.7f),
-                fontSize = 10.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .background(DarkBackground.copy(alpha = 0.7f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                text = if (isExpanded) "[TAP TO COLLAPSE]" else "[TAP TO EXPAND]",
+                color = TextPhosphorDim,
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.5.sp
             )
         }
     }
@@ -184,23 +303,47 @@ private fun GhostThumbnail(
 private fun GhostResponseArea(
     responseText: String,
     isGenerating: Boolean,
-    scrollState: androidx.compose.foundation.ScrollState
+    isEngineReady: Boolean,
+    scrollState: androidx.compose.foundation.ScrollState,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(8.dp))
-            .background(DarkSurface)
+            .clip(RoundedCornerShape(6.dp))
+            .background(GunmetalSurface.copy(alpha = 0.6f))
             .padding(12.dp)
     ) {
-        if (responseText.isEmpty() && !isGenerating) {
+        if (!isEngineReady && responseText.isEmpty()) {
+            // Loading state
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = PhosphorGreen,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "INITIALIZING NEURAL NET...",
+                    color = PhosphorDim,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+            }
+        } else if (responseText.isEmpty() && !isGenerating) {
+            // Empty state placeholder
             Text(
-                text = "Ask a question about the screen...",
-                color = TextSecondary.copy(alpha = 0.5f),
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center)
+                text = "> AWAITING INPUT...",
+                color = TextPhosphorDim.copy(alpha = 0.4f),
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier.align(Alignment.TopStart)
             )
         } else {
             Column(
@@ -208,20 +351,25 @@ private fun GhostResponseArea(
                     .fillMaxSize()
                     .verticalScroll(scrollState)
             ) {
+                // Response text with terminal aesthetic
                 Text(
                     text = responseText,
-                    color = TextPrimary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
+                    color = TextPhosphor,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 18.sp,
+                    letterSpacing = 0.25.sp,
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Blinking cursor when generating
                 if (isGenerating) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "▌",
-                        color = PhosphorGreen,
-                        fontSize = 14.sp
+                        text = "█",
+                        color = PhosphorGreen.copy(alpha = 0.8f),
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }
@@ -239,9 +387,18 @@ private fun GhostInputArea(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(DarkSurfaceVariant)
+            .height(44.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(GunmetalSurfaceVariant)
+            .drawBehind {
+                // Subtle phosphor outline
+                drawRect(
+                    color = BorderPhosphor.copy(alpha = 0.3f),
+                    topLeft = Offset(0f, 0f),
+                    size = Size(size.width, size.height),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+            }
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -250,23 +407,28 @@ private fun GhostInputArea(
             onValueChange = onQueryChange,
             enabled = enabled,
             textStyle = TextStyle(
-                color = TextPrimary,
-                fontSize = 14.sp
+                color = TextPhosphor,
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.25.sp
             ),
             decorationBox = { innerTextField ->
-                Box {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     if (query.isEmpty()) {
                         Text(
-                            text = "Ask about the screen...",
-                            color = TextSecondary.copy(alpha = 0.5f),
-                            fontSize = 14.sp
+                            text = "> HOW CAN I HELP?",
+                            color = TextPhosphorDim.copy(alpha = 0.5f),
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            letterSpacing = 0.25.sp
                         )
                     }
                     innerTextField()
                 }
             },
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .padding(vertical = 8.dp),
             singleLine = true
         )
@@ -279,7 +441,7 @@ private fun GhostInputArea(
             Icon(
                 imageVector = Icons.Default.Send,
                 contentDescription = "Send",
-                tint = if (enabled && query.isNotBlank()) PhosphorGreen else TextSecondary.copy(alpha = 0.3f),
+                tint = if (enabled && query.isNotBlank()) PhosphorGreen else TextPhosphorDim.copy(alpha = 0.3f),
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -287,51 +449,54 @@ private fun GhostInputArea(
 }
 
 /**
- * Expanded image dialog for viewing full screenshot.
+ * Draw scanline effect for CRT terminal aesthetic
  */
-@Composable
-fun ExpandedImageDialog(
-    bitmap: Bitmap,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
+private fun DrawScope.drawScanlines() {
+    val scanlineSpacing = 4.dp.toPx()
+    val scanlineAlpha = 0.02f
+    
+    var y = 0f
+    while (y < size.height) {
+        drawRect(
+            color = Color.Black.copy(alpha = scanlineAlpha),
+            topLeft = Offset(0f, y),
+            size = Size(size.width, 1.dp.toPx())
         )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(DarkBackground.copy(alpha = 0.9f))
-                .clickable(onClick = onDismiss)
-                .padding(16.dp)
-        ) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Full screenshot",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
-                    .clip(RoundedCornerShape(8.dp))
-                    .align(Alignment.Center)
-            )
-
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = TextPrimary,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
+        y += scanlineSpacing
     }
+}
+
+/**
+ * Draw phosphor glow effect around edges
+ */
+private fun DrawScope.drawPhosphorGlow() {
+    val strokeWidth = 2.dp.toPx()
+    
+    // Top border glow
+    drawRect(
+        color = BorderPhosphor.copy(alpha = 0.8f),
+        topLeft = Offset(0f, 0f),
+        size = Size(size.width, strokeWidth)
+    )
+    
+    // Left border glow
+    drawRect(
+        color = BorderPhosphor.copy(alpha = 0.3f),
+        topLeft = Offset(0f, 0f),
+        size = Size(strokeWidth, size.height)
+    )
+    
+    // Right border glow
+    drawRect(
+        color = BorderPhosphor.copy(alpha = 0.3f),
+        topLeft = Offset(size.width - strokeWidth, 0f),
+        size = Size(strokeWidth, size.height)
+    )
+    
+    // Bottom border glow
+    drawRect(
+        color = BorderPhosphor.copy(alpha = 0.3f),
+        topLeft = Offset(0f, size.height - strokeWidth),
+        size = Size(size.width, strokeWidth)
+    )
 }

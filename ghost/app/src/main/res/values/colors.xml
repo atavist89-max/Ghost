@@ -1,23 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Phosphor Green - Signature accent color -->
+    <!-- Phosphor Green - Primary signature color (radioactive green) -->
     <color name="phosphor_green">#39FF14</color>
-    <color name="phosphor_green_dim">#1A800A</color>
+    <color name="phosphor_green_dim">#2B8C1A</color>
     <color name="phosphor_green_bright">#5FFF3F</color>
+    <color name="phosphor_glow">#39FF14</color>
 
-    <!-- Dark theme base colors -->
-    <color name="dark_background">#0A0A0A</color>
+    <!-- Gunmetal background colors (cyberpunk terminal aesthetic) -->
+    <color name="gunmetal_background">#0A0F0A</color>
+    <color name="gunmetal_surface">#141414</color>
+    <color name="gunmetal_surface_variant">#1A1A1A</color>
+    <color name="dark_background">#0A0F0A</color>
     <color name="dark_surface">#141414</color>
     <color name="dark_surface_variant">#1E1E1E</color>
 
-    <!-- Text colors -->
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#B3B3B3</color>
-    <color name="text_disabled">#666666</color>
+    <!-- Text colors for phosphor theme -->
+    <color name="text_phosphor">#39FF14</color>
+    <color name="text_phosphor_dim">#2B8C1A</color>
+    <color name="text_primary">#E0FFE0</color>
+    <color name="text_secondary">#8FBC8F</color>
+    <color name="text_disabled">#4A5D4A</color>
+
+    <!-- CRT/Terminal effects -->
+    <color name="crt_scanline">#050A05</color>
+    <color name="crt_glow">#39FF14</color>
+    <color name="border_phosphor">#39FF14</color>
+    <color name="border_phosphor_dim">#1A800A</color>
 
     <!-- Utility colors -->
     <color name="error_red">#FF4444</color>
     <color name="warning_yellow">#FFAA00</color>
     <color name="transparent">#00000000</color>
     <color name="semi_transparent_black">#CC000000</color>
+    <color name="smoke_glass">#DD0A0F0A</color>
 </resources>
