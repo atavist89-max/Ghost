@@ -63,7 +63,7 @@ android {
 
 dependencies {
     // LiteRT-LM (Official Google library for .litertlm models)
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.1")
     
     // Activity and lifecycle
     implementation("androidx.activity:activity-compose:1.9.0")
