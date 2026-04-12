@@ -3,6 +3,7 @@ package com.ghost.app.inference
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
+import com.ghost.app.utils.DebugLogger
 import com.ghost.app.utils.GhostPaths
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Engine
@@ -69,15 +70,33 @@ class InferenceEngine(private val context: Context) {
                     ?: File(GhostPaths.MODEL_PATH)
 
                 // Log model file info for debugging
-                Log.i(TAG, "Loading model from: ${modelFile.absolutePath}")
-                Log.i(TAG, "Model exists: ${modelFile.exists()}")
-                Log.i(TAG, "Model size: ${modelFile.length()} bytes")
+                val modelInfo = "Loading model from: ${modelFile.absolutePath}"
+                Log.i(TAG, modelInfo)
+                DebugLogger.i(TAG, modelInfo)
+                
+                val existsMsg = "Model exists: ${modelFile.exists()}"
+                Log.i(TAG, existsMsg)
+                DebugLogger.i(TAG, existsMsg)
+                
+                val sizeBytes = modelFile.length()
+                val sizeMsg = "Model size: $sizeBytes bytes"
+                Log.i(TAG, sizeMsg)
+                DebugLogger.i(TAG, sizeMsg)
                 
                 // Vision models are typically 2GB+, text-only are ~1.5GB
-                val modelSizeMB = modelFile.length() / (1024 * 1024)
-                Log.i(TAG, "Model size: ${modelSizeMB}MB")
+                val modelSizeMB = sizeBytes / (1024 * 1024)
+                val sizeMBMsg = "Model size: ${modelSizeMB}MB"
+                Log.i(TAG, sizeMBMsg)
+                DebugLogger.i(TAG, sizeMBMsg)
+                
                 if (modelSizeMB < 2000) {
-                    Log.w(TAG, "WARNING: Model is <2GB, may be text-only variant. Vision models are typically 2.5GB+")
+                    val warning = "WARNING: Model is <2GB, may be text-only variant. Vision models are typically 2.5GB+"
+                    Log.w(TAG, warning)
+                    DebugLogger.w(TAG, warning)
+                } else {
+                    val okMsg = "Model appears to be vision-enabled (${modelSizeMB}MB)"
+                    Log.i(TAG, okMsg)
+                    DebugLogger.i(TAG, okMsg)
                 }
 
                 if (!modelFile.exists()) {
@@ -92,10 +111,14 @@ class InferenceEngine(private val context: Context) {
                 
                 // For vision models, GPU is required for image processing
                 val backend = if (thermalMonitor.shouldUseGpu()) {
-                    Log.i(TAG, "Using GPU backend for vision processing")
+                        val backendMsg = "Using GPU backend for vision processing"
+                    Log.i(TAG, backendMsg)
+                    DebugLogger.i(TAG, backendMsg)
                     Backend.GPU()
                 } else {
-                    Log.i(TAG, "Using CPU backend (GPU recommended for vision)")
+                    val backendMsg = "Using CPU backend (GPU recommended for vision)"
+                    Log.i(TAG, backendMsg)
+                    DebugLogger.i(TAG, backendMsg)
                     Backend.CPU()
                 }
 
@@ -111,14 +134,18 @@ class InferenceEngine(private val context: Context) {
                 engine?.initialize()
 
                 isInitialized.set(true)
-                Log.i(TAG, "Inference engine initialized successfully")
+                    val initMsg = "Inference engine initialized successfully"
+                    Log.i(TAG, initMsg)
+                    DebugLogger.i(TAG, initMsg)
 
                 withContext(Dispatchers.Main) {
                     onComplete(true, null)
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize inference engine", e)
+                val errorMsg = "Failed to initialize inference engine: ${e.message}"
+                Log.e(TAG, errorMsg, e)
+                DebugLogger.e(TAG, errorMsg, e)
                 withContext(Dispatchers.Main) {
                     onComplete(false, e.message)
                 }
@@ -169,18 +196,24 @@ class InferenceEngine(private val context: Context) {
                 // Verify image file exists and has content
                 val imageFile = File(imagePath)
                 if (!imageFile.exists() || imageFile.length() == 0L) {
-                    Log.e(TAG, "Image file missing or empty: $imagePath")
+                    val errorMsg = "Image file missing or empty: $imagePath"
+                    Log.e(TAG, errorMsg)
+                    DebugLogger.e(TAG, errorMsg)
                     onError("Image file error")
                     return@launch
                 }
                 
-                Log.i(TAG, "Image saved: $imagePath (${imageFile.length()} bytes)")
+                val imageSavedMsg = "Image saved: $imagePath (${imageFile.length()} bytes)"
+                Log.i(TAG, imageSavedMsg)
+                DebugLogger.i(TAG, imageSavedMsg)
 
                 // Build vision prompt with image token
                 // Gemma3/4 template format with <image_soft_token> or <|image|>
                 val visionPrompt = buildVisionPrompt(query, imagePath)
                 
-                Log.i(TAG, "Sending vision prompt: ${visionPrompt.take(200)}...")
+                val promptMsg = "Sending vision prompt: ${visionPrompt.take(200)}..."
+                Log.i(TAG, promptMsg)
+                DebugLogger.i(TAG, promptMsg)
 
                 // Create a conversation
                 val conversation = engineInstance.createConversation()
@@ -189,12 +222,16 @@ class InferenceEngine(private val context: Context) {
                     // Send message - Message.of() accepts the prompt string
                     val userMessageObj = Message.of(visionPrompt)
                     
-                    Log.d(TAG, "Message object created, sending to model...")
+                    val sendingMsg = "Message object created, sending to model..."
+                    Log.d(TAG, sendingMsg)
+                    DebugLogger.d(TAG, sendingMsg)
                     
                     val responseMessage = conversation.sendMessage(userMessageObj)
                     val responseText = responseMessage.toString()
                     
-                    Log.i(TAG, "Response received: ${responseText.take(100)}...")
+                    val responseMsg = "Response received: ${responseText.take(100)}..."
+                    Log.i(TAG, responseMsg)
+                    DebugLogger.i(TAG, responseMsg)
                     
                     // Simulate streaming by splitting into words/tokens
                     val tokens = responseText.split(" ")
@@ -217,7 +254,9 @@ class InferenceEngine(private val context: Context) {
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to analyze image", e)
+                val errorMsg = "Failed to analyze image: ${e.message}"
+                Log.e(TAG, errorMsg, e)
+                DebugLogger.e(TAG, errorMsg, e)
                 withContext(Dispatchers.Main) {
                     onError(e.message ?: "Inference failed")
                 }

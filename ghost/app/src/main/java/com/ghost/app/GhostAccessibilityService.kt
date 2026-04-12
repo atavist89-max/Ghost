@@ -8,6 +8,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
+import com.ghost.app.utils.DebugLogger
 import java.util.concurrent.Executor
 
 /**
@@ -46,7 +47,9 @@ class GhostAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.i(TAG, "AccessibilityService connected")
+        val msg = "AccessibilityService connected"
+        Log.i(TAG, msg)
+        DebugLogger.i(TAG, msg)
         _instance = this
     }
 
@@ -57,12 +60,16 @@ class GhostAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         // Required override - leave empty
-        Log.w(TAG, "AccessibilityService interrupted")
+        val msg = "AccessibilityService interrupted"
+        Log.w(TAG, msg)
+        DebugLogger.w(TAG, msg)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.i(TAG, "AccessibilityService destroyed")
+        val msg = "AccessibilityService destroyed"
+        Log.i(TAG, msg)
+        DebugLogger.i(TAG, msg)
         if (_instance === this) {
             _instance = null
         }
@@ -75,7 +82,9 @@ class GhostAccessibilityService : AccessibilityService() {
      * @param callback Function to receive the captured bitmap (null if failed)
      */
     fun takeScreenshotForGhost(callback: (Bitmap?) -> Unit) {
-        Log.d(TAG, "Requesting screenshot via AccessibilityService")
+        val msg = "Requesting screenshot via AccessibilityService"
+        Log.d(TAG, msg)
+        DebugLogger.d(TAG, msg)
         
         try {
             // Use API 30+ takeScreenshot with proper callback interface
@@ -87,8 +96,12 @@ class GhostAccessibilityService : AccessibilityService() {
                         val hardwareBuffer = screenshotResult.hardwareBuffer
                         val colorSpace = screenshotResult.colorSpace
                         
+                        DebugLogger.d(TAG, "ScreenshotResult received, hardwareBuffer=${hardwareBuffer != null}")
+                        
                         if (hardwareBuffer == null) {
-                            Log.e(TAG, "HardwareBuffer is null")
+                            val errorMsg = "HardwareBuffer is null"
+                            Log.e(TAG, errorMsg)
+                            DebugLogger.e(TAG, errorMsg)
                             callback(null)
                             return
                         }
@@ -100,27 +113,38 @@ class GhostAccessibilityService : AccessibilityService() {
                                 // Create a mutable copy since wrapped bitmap may be immutable
                                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                                 bitmap.recycle()
-                                Log.i(TAG, "Screenshot captured: ${mutableBitmap.width}x${mutableBitmap.height}")
+                                val successMsg = "Screenshot captured: ${mutableBitmap.width}x${mutableBitmap.height}, " +
+                                        "config=${mutableBitmap.config}, byteCount=${mutableBitmap.byteCount / 1024}KB"
+                                Log.i(TAG, successMsg)
+                                DebugLogger.i(TAG, successMsg)
                                 callback(mutableBitmap)
                             } else {
-                                Log.e(TAG, "Bitmap.wrapHardwareBuffer returned null")
+                                val errorMsg = "Bitmap.wrapHardwareBuffer returned null"
+                                Log.e(TAG, errorMsg)
+                                DebugLogger.e(TAG, errorMsg)
                                 callback(null)
                             }
                         } finally {
                             // CRITICAL: Always close HardwareBuffer to prevent memory leaks
                             hardwareBuffer.close()
-                            Log.d(TAG, "HardwareBuffer closed")
+                            val closeMsg = "HardwareBuffer closed"
+                            Log.d(TAG, closeMsg)
+                            DebugLogger.d(TAG, closeMsg)
                         }
                     }
                     
                     override fun onFailure(errorCode: Int) {
-                        Log.e(TAG, "Screenshot failed with error code: $errorCode")
+                        val errorMsg = "Screenshot failed with error code: $errorCode"
+                        Log.e(TAG, errorMsg)
+                        DebugLogger.e(TAG, errorMsg)
                         callback(null)
                     }
                 }
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error taking screenshot", e)
+            val errorMsg = "Error taking screenshot: ${e.message}"
+            Log.e(TAG, errorMsg, e)
+            DebugLogger.e(TAG, errorMsg, e)
             callback(null)
         }
     }
