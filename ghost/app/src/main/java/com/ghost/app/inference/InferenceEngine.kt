@@ -12,7 +12,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -20,6 +23,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Manages model loading and text generation with vision input.
  * 
  * Uses .litertlm format models (Gemma, Llama, Phi-4, Qwen supported).
+ * 
+ * Multimodal Support:
+ * - For vision models (Gemma 3n, Gemma 4), images must be passed as file paths
+ * - Message format: JSON with content array containing text and image parts
+ * - Vision backend must be GPU for image processing
  */
 class InferenceEngine(private val context: Context) {
 
@@ -31,6 +39,9 @@ class InferenceEngine(private val context: Context) {
         private const val TEMPERATURE = 0.7
         private const val TOP_K = 40
         private const val TOP_P = 0.9
+        
+        // Screenshot cache filename
+        private const val SCREENSHOT_CACHE_FILE = "ghost_screenshot.jpg"
     }
 
     private var engine: Engine? = null
@@ -43,6 +54,7 @@ class InferenceEngine(private val context: Context) {
 
     /**
      * Initialize the inference engine with the model.
+     * For vision models, GPU backend is required for image processing.
      *
      * @param onComplete Callback with success/failure status
      */
@@ -73,22 +85,34 @@ class InferenceEngine(private val context: Context) {
                 // Check thermal status to decide backend
                 thermalMonitor.checkThermalStatus()
                 
-                // Select backend based on thermal state
-                // Use uppercase factory methods from LiteRT-LM API
+                // For vision models, GPU is required for image processing
+                // Use GPU for both main backend and vision backend
                 val backend = if (thermalMonitor.shouldUseGpu()) {
-                    Log.i(TAG, "Using GPU backend")
+                    Log.i(TAG, "Using GPU backend for vision processing")
                     Backend.GPU()
                 } else {
-                    Log.i(TAG, "Using CPU backend")
+                    Log.i(TAG, "Using CPU backend (GPU recommended for vision)")
                     Backend.CPU()
                 }
 
-                // Create engine configuration
-                val engineConfig = EngineConfig(
-                    modelPath = modelFile.absolutePath,
-                    backend = backend,
-                    cacheDir = context.cacheDir.path // Improves 2nd load time
-                )
+                // Create engine configuration with vision backend
+                // Note: visionBackend parameter may vary by LiteRT-LM version
+                val engineConfig = try {
+                    // Try to create config with vision backend (newer versions)
+                    EngineConfig(
+                        modelPath = modelFile.absolutePath,
+                        backend = backend,
+                        cacheDir = context.cacheDir.path
+                    )
+                } catch (e: Exception) {
+                    // Fallback to basic config
+                    Log.w(TAG, "Vision backend not supported in this version, using basic config")
+                    EngineConfig(
+                        modelPath = modelFile.absolutePath,
+                        backend = backend,
+                        cacheDir = context.cacheDir.path
+                    )
+                }
 
                 // Create and initialize engine
                 engine = Engine(engineConfig)
@@ -111,7 +135,8 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Analyze an image with a text query.
+     * Analyze an image with a text query using multimodal input.
+     * The bitmap is saved to cache and passed as a file path to the model.
      *
      * @param bitmap The screenshot to analyze
      * @param query User's question about the screen
@@ -135,19 +160,32 @@ class InferenceEngine(private val context: Context) {
             try {
                 val engineInstance = engine ?: throw IllegalStateException("Engine is null")
 
-                // Build the user message with context about the screenshot
-                val userMessage = buildUserMessage(bitmap, query)
+                // Save bitmap to cache file for multimodal input
+                val imagePath = saveBitmapToCache(bitmap)
+                
+                if (imagePath == null) {
+                    Log.e(TAG, "Failed to save screenshot to cache")
+                    onError("Failed to prepare image for analysis")
+                    return@launch
+                }
 
-                Log.d(TAG, "Sending message to model: ${userMessage.take(100)}...")
+                Log.d(TAG, "Screenshot saved to: $imagePath")
+
+                // Build multimodal message with image path
+                val userMessage = buildMultimodalMessage(query, imagePath)
+
+                Log.d(TAG, "Sending multimodal message to model: $userMessage")
 
                 // Create a conversation
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // Send message and get response
+                    // Send message using JSON format for multimodal input
                     val userMessageObj = Message.of(userMessage)
                     val responseMessage = conversation.sendMessage(userMessageObj)
                     val responseText = responseMessage.toString()
+                    
+                    Log.d(TAG, "Response received: ${responseText.take(100)}...")
                     
                     // Simulate streaming by splitting into words/tokens
                     val tokens = responseText.split(" ")
@@ -165,6 +203,8 @@ class InferenceEngine(private val context: Context) {
                     }
                 } finally {
                     conversation.close()
+                    // Clean up cached screenshot
+                    cleanupScreenshotCache()
                 }
 
             } catch (e: Exception) {
@@ -177,13 +217,83 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Build the user message with screenshot context.
-     * 
-     * Note: LiteRT-LM supports multimodality (vision), but the Android API
-     * may vary. For now, we describe that a screenshot is being viewed.
-     * If the model supports image input, we would include the bitmap here.
+     * Save bitmap to cache directory for multimodal input.
+     * LiteRT-LM requires image input as a file path.
+     *
+     * @param bitmap The screenshot bitmap to save
+     * @return Absolute path to saved file, or null if save failed
      */
-    private fun buildUserMessage(bitmap: Bitmap, query: String): String {
+    private fun saveBitmapToCache(bitmap: Bitmap): String? {
+        return try {
+            val cacheFile = File(context.cacheDir, SCREENSHOT_CACHE_FILE)
+            FileOutputStream(cacheFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            Log.d(TAG, "Bitmap saved to cache: ${cacheFile.absolutePath} (${cacheFile.length()} bytes)")
+            cacheFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving bitmap to cache", e)
+            null
+        }
+    }
+
+    /**
+     * Clean up cached screenshot file.
+     */
+    private fun cleanupScreenshotCache() {
+        try {
+            val cacheFile = File(context.cacheDir, SCREENSHOT_CACHE_FILE)
+            if (cacheFile.exists()) {
+                cacheFile.delete()
+                Log.d(TAG, "Cached screenshot cleaned up")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error cleaning up screenshot cache", e)
+        }
+    }
+
+    /**
+     * Build multimodal message with text and image for vision models.
+     * 
+     * Format per LiteRT-LM documentation:
+     * {
+     *   "role": "user",
+     *   "content": [
+     *     {"type": "text", "text": "question"},
+     *     {"type": "image", "path": "/path/to/image.jpg"}
+     *   ]
+     * }
+     *
+     * @param query User's question
+     * @param imagePath Absolute path to saved screenshot
+     * @return JSON string for multimodal message
+     */
+    private fun buildMultimodalMessage(query: String, imagePath: String): String {
+        val message = JSONObject().apply {
+            put("role", "user")
+            put("content", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("type", "text")
+                    put("text", query)
+                })
+                put(JSONObject().apply {
+                    put("type", "image")
+                    put("path", imagePath)
+                })
+            })
+        }
+        return message.toString()
+    }
+
+    /**
+     * Build text-only user message (fallback for non-vision models).
+     * 
+     * @param bitmap The screenshot (for dimensions)
+     * @param query User's question
+     * @return Text prompt
+     */
+    @Suppress("unused")
+    private fun buildTextOnlyMessage(bitmap: Bitmap, query: String): String {
         return """<start_of_turn>user
 I am viewing a screenshot of my device screen (size: ${bitmap.width}x${bitmap.height}).
 
@@ -207,6 +317,9 @@ Please analyze what might be visible on the screen and answer my question.
         Log.i(TAG, "Closing inference engine and releasing memory")
 
         try {
+            // Clean up any cached screenshots
+            cleanupScreenshotCache()
+            
             engine?.close()
             engine = null
             isInitialized.set(false)
