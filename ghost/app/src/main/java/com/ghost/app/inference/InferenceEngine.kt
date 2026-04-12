@@ -74,13 +74,13 @@ class InferenceEngine(private val context: Context) {
                 thermalMonitor.checkThermalStatus()
                 
                 // Select backend based on thermal state
-                // Use lowercase factory methods from LiteRT-LM API
+                // Use uppercase factory methods from LiteRT-LM API
                 val backend = if (thermalMonitor.shouldUseGpu()) {
                     Log.i(TAG, "Using GPU backend")
-                    Backend.gpu()
+                    Backend.GPU()
                 } else {
                     Log.i(TAG, "Using CPU backend")
-                    Backend.cpu()
+                    Backend.CPU()
                 }
 
                 // Create engine configuration
