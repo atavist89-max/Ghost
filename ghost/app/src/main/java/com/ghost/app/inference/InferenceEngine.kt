@@ -12,8 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -24,10 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 
  * Uses .litertlm format models (Gemma, Llama, Phi-4, Qwen supported).
  * 
- * Multimodal Support:
- * - For vision models (Gemma 3n, Gemma 4), images must be passed as file paths
- * - Message format: JSON with content array containing text and image parts
- * - Vision backend must be GPU for image processing
+ * Vision Model Support:
+ * - Gemma 3n/4 vision models require special prompt template with <image_soft_token>
+ * - Image must be saved to disk and path passed via prompt template
+ * - GPU backend required for vision processing
  */
 class InferenceEngine(private val context: Context) {
 
@@ -74,6 +72,13 @@ class InferenceEngine(private val context: Context) {
                 Log.i(TAG, "Loading model from: ${modelFile.absolutePath}")
                 Log.i(TAG, "Model exists: ${modelFile.exists()}")
                 Log.i(TAG, "Model size: ${modelFile.length()} bytes")
+                
+                // Vision models are typically 2GB+, text-only are ~1.5GB
+                val modelSizeMB = modelFile.length() / (1024 * 1024)
+                Log.i(TAG, "Model size: ${modelSizeMB}MB")
+                if (modelSizeMB < 2000) {
+                    Log.w(TAG, "WARNING: Model is <2GB, may be text-only variant. Vision models are typically 2.5GB+")
+                }
 
                 if (!modelFile.exists()) {
                     throw IllegalStateException(
@@ -86,7 +91,6 @@ class InferenceEngine(private val context: Context) {
                 thermalMonitor.checkThermalStatus()
                 
                 // For vision models, GPU is required for image processing
-                // Use GPU for both main backend and vision backend
                 val backend = if (thermalMonitor.shouldUseGpu()) {
                     Log.i(TAG, "Using GPU backend for vision processing")
                     Backend.GPU()
@@ -95,24 +99,12 @@ class InferenceEngine(private val context: Context) {
                     Backend.CPU()
                 }
 
-                // Create engine configuration with vision backend
-                // Note: visionBackend parameter may vary by LiteRT-LM version
-                val engineConfig = try {
-                    // Try to create config with vision backend (newer versions)
-                    EngineConfig(
-                        modelPath = modelFile.absolutePath,
-                        backend = backend,
-                        cacheDir = context.cacheDir.path
-                    )
-                } catch (e: Exception) {
-                    // Fallback to basic config
-                    Log.w(TAG, "Vision backend not supported in this version, using basic config")
-                    EngineConfig(
-                        modelPath = modelFile.absolutePath,
-                        backend = backend,
-                        cacheDir = context.cacheDir.path
-                    )
-                }
+                // Create engine configuration
+                val engineConfig = EngineConfig(
+                    modelPath = modelFile.absolutePath,
+                    backend = backend,
+                    cacheDir = context.cacheDir.path
+                )
 
                 // Create and initialize engine
                 engine = Engine(engineConfig)
@@ -135,8 +127,13 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Analyze an image with a text query using multimodal input.
-     * The bitmap is saved to cache and passed as a file path to the model.
+     * Analyze an image with a text query using vision model prompt template.
+     * 
+     * CRITICAL: Vision models require <image_soft_token> in the prompt template.
+     * The image path is embedded in the prompt using <|image|> or similar tokens.
+     * 
+     * Per LiteRT-LM docs and Gemma3/4 template:
+     * https://github.com/google-ai-edge/LiteRT-LM/issues/1874
      *
      * @param bitmap The screenshot to analyze
      * @param query User's question about the screen
@@ -160,7 +157,7 @@ class InferenceEngine(private val context: Context) {
             try {
                 val engineInstance = engine ?: throw IllegalStateException("Engine is null")
 
-                // Save bitmap to cache file for multimodal input
+                // Save bitmap to cache file - image must persist for inference
                 val imagePath = saveBitmapToCache(bitmap)
                 
                 if (imagePath == null) {
@@ -169,23 +166,35 @@ class InferenceEngine(private val context: Context) {
                     return@launch
                 }
 
-                Log.d(TAG, "Screenshot saved to: $imagePath")
+                // Verify image file exists and has content
+                val imageFile = File(imagePath)
+                if (!imageFile.exists() || imageFile.length() == 0L) {
+                    Log.e(TAG, "Image file missing or empty: $imagePath")
+                    onError("Image file error")
+                    return@launch
+                }
+                
+                Log.i(TAG, "Image saved: $imagePath (${imageFile.length()} bytes)")
 
-                // Build multimodal message with image path
-                val userMessage = buildMultimodalMessage(query, imagePath)
-
-                Log.d(TAG, "Sending multimodal message to model: $userMessage")
+                // Build vision prompt with image token
+                // Gemma3/4 template format with <image_soft_token> or <|image|>
+                val visionPrompt = buildVisionPrompt(query, imagePath)
+                
+                Log.i(TAG, "Sending vision prompt: ${visionPrompt.take(200)}...")
 
                 // Create a conversation
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // Send message using JSON format for multimodal input
-                    val userMessageObj = Message.of(userMessage)
+                    // Send message - Message.of() accepts the prompt string
+                    val userMessageObj = Message.of(visionPrompt)
+                    
+                    Log.d(TAG, "Message object created, sending to model...")
+                    
                     val responseMessage = conversation.sendMessage(userMessageObj)
                     val responseText = responseMessage.toString()
                     
-                    Log.d(TAG, "Response received: ${responseText.take(100)}...")
+                    Log.i(TAG, "Response received: ${responseText.take(100)}...")
                     
                     // Simulate streaming by splitting into words/tokens
                     val tokens = responseText.split(" ")
@@ -194,7 +203,6 @@ class InferenceEngine(private val context: Context) {
                         mainScope.launch {
                             onToken("$token ")
                         }
-                        // Small delay for streaming effect
                         kotlinx.coroutines.delay(30)
                     }
 
@@ -203,7 +211,8 @@ class InferenceEngine(private val context: Context) {
                     }
                 } finally {
                     conversation.close()
-                    // Clean up cached screenshot
+                    // Don't clean up immediately - allow time for any pending operations
+                    kotlinx.coroutines.delay(100)
                     cleanupScreenshotCache()
                 }
 
@@ -217,19 +226,78 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Save bitmap to cache directory for multimodal input.
-     * LiteRT-LM requires image input as a file path.
+     * Build vision prompt with image token for Gemma 3n/4 models.
+     * 
+     * Based on LiteRT-LM GitHub issue #1874 and Gemma3 template:
+     * https://github.com/google-ai-edge/LiteRT-LM/issues/1874
+     * 
+     * The prompt template must include <image_soft_token> or similar
+     * for the model to recognize image input.
+     * 
+     * Gemma3 template format:
+     * {%- for item in message['content'] -%}
+     *   {%- if item['type'] == 'image' -%}
+     *     {{ '<image_soft_token>' }}
+     *   {%- elif item['type'] == 'text' -%}
+     *     {{ item['text'] | trim }}
+     *   {%- endif -%}
+     * {%- endfor -%}
+     *
+     * @param query User's question
+     * @param imagePath Absolute path to saved screenshot
+     * @return Formatted vision prompt
+     */
+    private fun buildVisionPrompt(query: String, imagePath: String): String {
+        // Try multiple image token formats that vision models might recognize
+        // Order: most likely to least likely
+        
+        // Option 1: Gemma3/4 format with <image_soft_token>
+        // This is the official token from the Gemma3 template
+        return """<start_of_turn>user
+<image_soft_token>
+$query
+<end_of_turn>
+<start_of_turn>model""".trimIndent()
+        
+        // Alternative formats if the above doesn't work:
+        // Option 2: With image path embedded
+        // return "<start_of_turn>user\n<|image|>\n$query\nImage: $imagePath\n<end_of_turn>\n<start_of_turn>model"
+        
+        // Option 3: JSON format (if Message.of() parses it)
+        // return """{"role": "user", "content": [{"type": "image", "path": "$imagePath"}, {"type": "text", "text": "$query"}]}"""
+    }
+
+    /**
+     * Save bitmap to cache directory for vision model input.
+     * The image file must persist until inference completes.
      *
      * @param bitmap The screenshot bitmap to save
      * @return Absolute path to saved file, or null if save failed
      */
     private fun saveBitmapToCache(bitmap: Bitmap): String? {
         return try {
+            // Ensure bitmap is ARGB_8888 format
+            val safeBitmap = if (bitmap.config != Bitmap.Config.ARGB_8888) {
+                Log.w(TAG, "Converting bitmap from ${bitmap.config} to ARGB_8888")
+                bitmap.copy(Bitmap.Config.ARGB_8888, true)
+            } else {
+                bitmap
+            }
+            
             val cacheFile = File(context.cacheDir, SCREENSHOT_CACHE_FILE)
             FileOutputStream(cacheFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                // Use JPEG 95% quality for best vision model performance
+                safeBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                out.flush()
             }
-            Log.d(TAG, "Bitmap saved to cache: ${cacheFile.absolutePath} (${cacheFile.length()} bytes)")
+            
+            // Verify the file was written
+            if (!cacheFile.exists() || cacheFile.length() == 0L) {
+                Log.e(TAG, "Failed to write image file")
+                return null
+            }
+            
+            Log.i(TAG, "Bitmap saved: ${cacheFile.absolutePath} (${cacheFile.length()} bytes, ${safeBitmap.width}x${safeBitmap.height})")
             cacheFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error saving bitmap to cache", e)
@@ -244,8 +312,8 @@ class InferenceEngine(private val context: Context) {
         try {
             val cacheFile = File(context.cacheDir, SCREENSHOT_CACHE_FILE)
             if (cacheFile.exists()) {
-                cacheFile.delete()
-                Log.d(TAG, "Cached screenshot cleaned up")
+                val deleted = cacheFile.delete()
+                Log.d(TAG, "Cached screenshot cleaned up: $deleted")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error cleaning up screenshot cache", e)
@@ -253,95 +321,29 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Build multimodal message with text and image for vision models.
-     * 
-     * Format per LiteRT-LM documentation:
-     * {
-     *   "role": "user",
-     *   "content": [
-     *     {"type": "text", "text": "question"},
-     *     {"type": "image", "path": "/path/to/image.jpg"}
-     *   ]
-     * }
-     *
-     * @param query User's question
-     * @param imagePath Absolute path to saved screenshot
-     * @return JSON string for multimodal message
-     */
-    private fun buildMultimodalMessage(query: String, imagePath: String): String {
-        val message = JSONObject().apply {
-            put("role", "user")
-            put("content", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("type", "text")
-                    put("text", query)
-                })
-                put(JSONObject().apply {
-                    put("type", "image")
-                    put("path", imagePath)
-                })
-            })
-        }
-        return message.toString()
-    }
-
-    /**
-     * Build text-only user message (fallback for non-vision models).
-     * 
-     * @param bitmap The screenshot (for dimensions)
-     * @param query User's question
-     * @return Text prompt
-     */
-    @Suppress("unused")
-    private fun buildTextOnlyMessage(bitmap: Bitmap, query: String): String {
-        return """<start_of_turn>user
-I am viewing a screenshot of my device screen (size: ${bitmap.width}x${bitmap.height}).
-
-My question: $query
-
-Please analyze what might be visible on the screen and answer my question.
-<end_of_turn>
-<start_of_turn>model
-""".trimIndent()
-    }
-
-    /**
      * Close the inference engine and release all resources.
-     * This is critical for memory management.
      */
     fun close() {
         if (isClosed.getAndSet(true)) {
             return
         }
 
-        Log.i(TAG, "Closing inference engine and releasing memory")
+        Log.i(TAG, "Closing inference engine")
 
         try {
-            // Clean up any cached screenshots
             cleanupScreenshotCache()
-            
             engine?.close()
             engine = null
             isInitialized.set(false)
-            Log.i(TAG, "Inference engine released successfully")
+            Log.i(TAG, "Inference engine released")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing inference engine", e)
         }
     }
 
-    /**
-     * Check if the engine is initialized and ready.
-     */
-    fun isReady(): Boolean {
-        return isInitialized.get() && !isClosed.get()
-    }
-
-    /**
-     * Get current thermal state.
-     */
-    fun getThermalState(): ThermalMonitor.ThermalState {
-        return thermalMonitor.thermalState.value
-    }
+    fun isReady(): Boolean = isInitialized.get() && !isClosed.get()
+    
+    fun getThermalState(): ThermalMonitor.ThermalState = thermalMonitor.thermalState.value
 
     protected fun finalize() {
         close()

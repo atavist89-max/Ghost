@@ -110,11 +110,21 @@ class ChatActivity : ComponentActivity() {
             return
         }
         
+        // Verify bitmap is valid before sending to inference
+        val bitmap = capturedBitmap!!
+        if (bitmap.isRecycled) {
+            Log.e(TAG, "Bitmap is recycled!")
+            _responseText.value = "Error: Screenshot was recycled"
+            return
+        }
+        
+        Log.i(TAG, "Sending bitmap to inference: ${bitmap.width}x${bitmap.height}, config=${bitmap.config}")
+        
         _responseText.value = ""
         _isGenerating.value = true
         
         inferenceEngine?.analyzeImage(
-            bitmap = capturedBitmap!!,
+            bitmap = bitmap,
             query = query,
             onToken = { token ->
                 mainScope.launch {
