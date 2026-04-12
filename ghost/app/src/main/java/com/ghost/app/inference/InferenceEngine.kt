@@ -74,12 +74,13 @@ class InferenceEngine(private val context: Context) {
                 thermalMonitor.checkThermalStatus()
                 
                 // Select backend based on thermal state
+                // Backend.GPU and Backend.CPU are classes that need instantiation
                 val backend = if (thermalMonitor.shouldUseGpu()) {
                     Log.i(TAG, "Using GPU backend")
-                    Backend.GPU
+                    Backend.GPU()
                 } else {
                     Log.i(TAG, "Using CPU backend")
-                    Backend.CPU
+                    Backend.CPU()
                 }
 
                 // Create engine configuration
