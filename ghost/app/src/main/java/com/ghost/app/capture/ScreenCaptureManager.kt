@@ -58,8 +58,16 @@ class ScreenCaptureManager(context: Context) {
      * @param onCapture Callback with captured bitmap (null if failed)
      */
     fun startCapture(context: Context, result: ActivityResult, onCapture: (Bitmap?) -> Unit) {
+        Log.d(TAG, "startCapture called with resultCode: ${result.resultCode}")
+        
         if (result.resultCode != android.app.Activity.RESULT_OK) {
-            Log.w(TAG, "MediaProjection permission denied")
+            Log.w(TAG, "MediaProjection permission denied, resultCode: ${result.resultCode}")
+            onCapture(null)
+            return
+        }
+
+        if (result.data == null) {
+            Log.e(TAG, "MediaProjection result data is null")
             onCapture(null)
             return
         }
@@ -67,14 +75,35 @@ class ScreenCaptureManager(context: Context) {
         try {
             // Start foreground service (required for Android 10+)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                Log.d(TAG, "Starting foreground service for MediaProjection")
                 val serviceIntent = Intent(context, ScreenCaptureService::class.java).apply {
                     action = ScreenCaptureService.ACTION_START
                 }
                 context.startForegroundService(serviceIntent)
+                // Give service time to start
+                Thread.sleep(100)
             }
 
             // Initialize MediaProjection
+            Log.d(TAG, "Creating MediaProjection")
             mediaProjection = mediaProjectionManager.getMediaProjection(result.resultCode, result.data!!)
+            
+            if (mediaProjection == null) {
+                Log.e(TAG, "MediaProjection is null after creation")
+                stopCapture(context)
+                onCapture(null)
+                return
+            }
+            
+            Log.d(TAG, "MediaProjection created successfully")
+            
+            // Register MediaProjection callback
+            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    Log.w(TAG, "MediaProjection stopped")
+                    stopCapture(context)
+                }
+            }, mainHandler)
 
             // Create ImageReader for capturing frames
             imageReader = ImageReader.newInstance(
@@ -85,6 +114,7 @@ class ScreenCaptureManager(context: Context) {
             )
 
             // Create VirtualDisplay BEFORE setting listener to ensure it's ready
+            Log.d(TAG, "Creating VirtualDisplay: ${CAPTURE_WIDTH}x${CAPTURE_HEIGHT}")
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "GhostScreenCapture",
                 CAPTURE_WIDTH,
@@ -95,6 +125,15 @@ class ScreenCaptureManager(context: Context) {
                 null,
                 mainHandler
             )
+            
+            if (virtualDisplay == null) {
+                Log.e(TAG, "VirtualDisplay is null after creation")
+                stopCapture(context)
+                onCapture(null)
+                return
+            }
+            
+            Log.d(TAG, "VirtualDisplay created successfully")
 
             // Set up image available listener
             imageReader?.setOnImageAvailableListener({ reader ->

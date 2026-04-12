@@ -110,13 +110,42 @@ object PermissionChecker {
 
     /**
      * Check all required permissions.
-     * @return Pair of (hasStorage, hasOverlay)
+     * @return Triple of (hasStorage, hasOverlay, hasNotifications)
      */
-    fun checkAllPermissions(context: Context): Pair<Boolean, Boolean> {
-        return Pair(
+    fun checkAllPermissions(context: Context): Triple<Boolean, Boolean, Boolean> {
+        return Triple(
             hasManageExternalStorage(context),
-            hasOverlayPermission(context)
+            hasOverlayPermission(context),
+            hasNotificationPermission(context)
         )
+    }
+    
+    /**
+     * Check if POST_NOTIFICATIONS permission is granted (Android 13+)
+     */
+    fun hasNotificationPermission(context: Context): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == 
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            true // Not needed on older versions
+        }
+    }
+    
+    /**
+     * Request notification permission (Android 13+)
+     */
+    fun requestNotificationPermission(activity: Activity): Boolean {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (!hasNotificationPermission(activity)) {
+                activity.requestPermissions(
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    1003
+                )
+                return false
+            }
+        }
+        return true
     }
 
     /**

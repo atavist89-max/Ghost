@@ -73,7 +73,7 @@ class GhostActivity : Activity() {
      * Check and request required permissions.
      */
     private fun checkAndRequestPermissions(): Boolean {
-        val (hasStorage, hasOverlay) = PermissionChecker.checkAllPermissions(this)
+        val (hasStorage, hasOverlay, hasNotifications) = PermissionChecker.checkAllPermissions(this)
 
         if (!hasStorage) {
             Log.i(TAG, "Requesting MANAGE_EXTERNAL_STORAGE permission")
@@ -83,6 +83,11 @@ class GhostActivity : Activity() {
         if (!hasOverlay) {
             Log.i(TAG, "Requesting SYSTEM_ALERT_WINDOW permission")
             return PermissionChecker.requestOverlayPermission(this)
+        }
+        
+        if (!hasNotifications) {
+            Log.i(TAG, "Requesting POST_NOTIFICATIONS permission")
+            return PermissionChecker.requestNotificationPermission(this)
         }
 
         return true
