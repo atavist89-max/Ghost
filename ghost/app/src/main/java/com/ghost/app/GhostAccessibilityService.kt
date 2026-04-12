@@ -2,9 +2,7 @@ package com.ghost.app
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
-import android.graphics.PixelFormat
 import android.hardware.HardwareBuffer
-import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -80,77 +78,50 @@ class GhostAccessibilityService : AccessibilityService() {
         Log.d(TAG, "Requesting screenshot via AccessibilityService")
         
         try {
-            // Use API 30+ takeScreenshot with default display
+            // Use API 30+ takeScreenshot with proper callback interface
             takeScreenshot(
                 Display.DEFAULT_DISPLAY,
                 executor,
-                { screenshotResult ->
-                    if (screenshotResult == null) {
-                        Log.e(TAG, "ScreenshotResult is null")
-                        callback(null)
-                        return@takeScreenshot
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshotResult: ScreenshotResult) {
+                        val hardwareBuffer = screenshotResult.hardwareBuffer
+                        val colorSpace = screenshotResult.colorSpace
+                        
+                        if (hardwareBuffer == null) {
+                            Log.e(TAG, "HardwareBuffer is null")
+                            callback(null)
+                            return
+                        }
+                        
+                        try {
+                            // Convert HardwareBuffer to Bitmap using wrapHardwareBuffer
+                            val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            if (bitmap != null) {
+                                // Create a mutable copy since wrapped bitmap may be immutable
+                                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                                bitmap.recycle()
+                                Log.i(TAG, "Screenshot captured: ${mutableBitmap.width}x${mutableBitmap.height}")
+                                callback(mutableBitmap)
+                            } else {
+                                Log.e(TAG, "Bitmap.wrapHardwareBuffer returned null")
+                                callback(null)
+                            }
+                        } finally {
+                            // CRITICAL: Always close HardwareBuffer to prevent memory leaks
+                            hardwareBuffer.close()
+                            Log.d(TAG, "HardwareBuffer closed")
+                        }
                     }
                     
-                    val hardwareBuffer = screenshotResult.hardwareBuffer
-                    if (hardwareBuffer == null) {
-                        Log.e(TAG, "HardwareBuffer is null")
+                    override fun onFailure(errorCode: Int) {
+                        Log.e(TAG, "Screenshot failed with error code: $errorCode")
                         callback(null)
-                        return@takeScreenshot
-                    }
-                    
-                    try {
-                        // Convert HardwareBuffer to Bitmap
-                        val bitmap = hardwareBufferToBitmap(hardwareBuffer)
-                        Log.i(TAG, "Screenshot captured: ${bitmap?.width}x${bitmap?.height}")
-                        callback(bitmap)
-                    } finally {
-                        // CRITICAL: Always close HardwareBuffer to prevent memory leaks
-                        hardwareBuffer.close()
-                        Log.d(TAG, "HardwareBuffer closed")
                     }
                 }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error taking screenshot", e)
             callback(null)
-        }
-    }
-
-    /**
-     * Convert HardwareBuffer to Bitmap.
-     * HardwareBuffer must be closed after this operation.
-     */
-    private fun hardwareBufferToBitmap(hardwareBuffer: HardwareBuffer): Bitmap? {
-        return try {
-            val width = hardwareBuffer.width
-            val height = hardwareBuffer.height
-            
-            // Create bitmap with ARGB_8888 config
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            
-            // Copy pixels from HardwareBuffer to Bitmap
-            // Note: HardwareBuffer doesn't have a direct copy method, 
-            // so we use the bitmap's copyPixelsFromBuffer approach
-            // The HardwareBuffer needs to be converted to a usable format
-            
-            // For API 30+, we can use Bitmap.copyPixelsFromBuffer with the HardwareBuffer
-            // However, HardwareBuffer requires special handling
-            // The actual implementation uses HardwareBuffer's built-in bitmap creation
-            
-            // Alternative approach: use the hardwareBuffer directly via Bitmap.wrapHardwareBuffer
-            val wrappedBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
-            if (wrappedBitmap != null) {
-                // Copy to a mutable bitmap
-                val mutableBitmap = wrappedBitmap.copy(Bitmap.Config.ARGB_8888, true)
-                wrappedBitmap.recycle()
-                mutableBitmap
-            } else {
-                Log.e(TAG, "Failed to wrap HardwareBuffer")
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error converting HardwareBuffer to Bitmap", e)
-            null
         }
     }
 }
