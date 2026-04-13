@@ -4,15 +4,17 @@ import android.graphics.Bitmap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -35,29 +39,31 @@ import com.ghost.app.BuildConfig
 import com.ghost.app.ui.theme.GhostColors
 import com.ghost.app.ui.theme.VT323
 
-// Phosphor Green Pip-Boy Colors
+// Phosphor Green Cyberpunk Colors
 private val PhosphorGreen = Color(0xFF39FF14)
 private val PhosphorDim = Color(0xFF2B8C1A)
 private val PhosphorBright = Color(0xFF5FFF3F)
 private val GunmetalBg = Color(0xFF0A0F0A)
 private val GunmetalSurface = Color(0xFF141414)
-private val MetallicDark = Color(0xFF2A2A2A)
-private val MetallicLight = Color(0xFF4A4A4A)
-private val BoltColor = Color(0xFF6A6A6A)
+private val GunmetalSurfaceVariant = Color(0xFF1A1A1A)
+private val MetallicGray = Color(0xFF4A4A4A)
+private val DarkMetal = Color(0xFF2A2A2A)
+private val TextPhosphor = Color(0xFFE0FFE0)
+private val TextPhosphorDim = Color(0xFF8FBC8F)
+private val BorderPhosphor = Color(0xFF39FF14)
 
 /**
- * Pip-Boy Terminal UI Component - Industrial 1950s-60s CRT Terminal Aesthetic
- *
+ * Ghost PiP UI Component - Pip-Boy Industrial Terminal Aesthetic
+ * 
  * Features:
- * - Compact 260dp×380dp wrist-mounted display
- * - Iris mechanical eye mascot (40×24dp scaled)
- * - Industrial frame with bolt heads and metallic border
- * - Heavy CRT scanlines and phosphor bloom effects
+ * - Compact 260x380dp wrist-mounted terminal
+ * - Iris mechanical eye mascot (40x24dp, sole brand identifier)
+ * - Industrial housing with bolt heads and metallic border
+ * - Heavy CRT scanlines (40% opacity)
  * - VT323 terminal font throughout
- * - Physical-looking tabs: [VISUAL] [DATA] [STAT]
- * - Holotape thumbnail with notched corners
- * - Terminal response area with line numbers
- * - Flat command line input with > prompt
+ * - Holotape data thumbnail with notched corners
+ * - Terminal command line input (> prompt)
+ * - Line numbers in response area
  */
 @Composable
 fun GhostInterface(
@@ -74,30 +80,30 @@ fun GhostInterface(
     var query by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-
+    
     // Auto-collapse when keyboard opens
     LaunchedEffect(isKeyboardOpen) {
         if (isKeyboardOpen && isExpanded) isExpanded = false
     }
-
+    
     // Iris state management
     var irisState by remember { mutableStateOf(IrisView.State.IDLE) }
     var cursorPosition by remember { mutableFloatStateOf(0.5f) }
     var lastTypingTime by remember { mutableLongStateOf(0L) }
     var isTyping by remember { mutableStateOf(false) }
-
+    
     // Track typing and cursor position
     LaunchedEffect(query) {
         if (query.isNotEmpty()) {
             isTyping = true
             lastTypingTime = System.currentTimeMillis()
             irisState = IrisView.State.LISTENING
-            cursorPosition = if (query.isEmpty()) 0.5f else 0.3f + (query.length.coerceAtMost(20) / 20f) * 0.4f
+            cursorPosition = 0.3f + (query.length.coerceAtMost(20) / 20f) * 0.4f
         } else {
             isTyping = false
         }
     }
-
+    
     // Auto-transition from LISTENING to FOCUSED after pause
     LaunchedEffect(lastTypingTime) {
         if (isTyping && irisState == IrisView.State.LISTENING) {
@@ -107,7 +113,7 @@ fun GhostInterface(
             }
         }
     }
-
+    
     // Update iris state based on generation status
     LaunchedEffect(isGenerating, responseText) {
         irisState = when {
@@ -125,45 +131,29 @@ fun GhostInterface(
         }
     }
 
-    // Blinking cursor animation for terminal
-    val cursorAlpha by animateFloatAsState(
-        targetValue = if (isGenerating) 0f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(530, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "cursor"
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(2.dp)
+            .padding(2.dp)  // Reduced from 4dp
     ) {
-        // Industrial container with CRT effects
+        // Industrial container with bolts and bevel
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(2.dp))
+                .clip(RoundedCornerShape(2.dp))  // Almost square industrial corners
                 .background(GunmetalBg.copy(alpha = 0.95f))
-                .border(
-                    width = 4.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(MetallicDark, MetallicLight, MetallicDark),
-                        start = Offset(0f, 0f),
-                        end = Offset(0f, Float.MAX_VALUE)
-                    ),
-                    shape = RoundedCornerShape(2.dp)
-                )
-                .drawBehind { drawInnerBevel() }
+                .drawBehind { 
+                    drawInnerBevel()
+                    drawCRTBloom()
+                }
                 .drawWithContent {
                     drawContent()
-                    drawHeavyScanlines()
+                    drawScanlines()
                     drawVignette()
                 }
-                .padding(6.dp)
+                .padding(6.dp)  // Reduced from 12dp
         ) {
-            // Header: Iris + Tabs + Holotape
+            // Header: Iris + Tabs + Holotape thumbnail
             PipBoyHeader(
                 irisState = irisState,
                 cursorPosition = cursorPosition,
@@ -174,14 +164,14 @@ fun GhostInterface(
                 onDebugClick = onDebugClick
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))  // Reduced from 8dp
 
-            // Phosphor divider
+            // Phosphor divider line
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(PhosphorGreen.copy(alpha = 0.5f))
+                    .background(BorderPhosphor.copy(alpha = 0.5f))
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -195,12 +185,12 @@ fun GhostInterface(
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(6.dp))  // Reduced from 12dp
 
             // Terminal command line input
             TerminalInputLine(
                 query = query,
-                onQueryChange = {
+                onQueryChange = { 
                     query = it
                     cursorPosition = if (it.isEmpty()) 0.5f else 0.3f + (it.length.coerceAtMost(20) / 20f) * 0.4f
                 },
@@ -211,8 +201,7 @@ fun GhostInterface(
                         irisState = IrisView.State.THINKING
                     }
                 },
-                enabled = !isGenerating && isEngineReady,
-                cursorAlpha = cursorAlpha
+                enabled = !isGenerating && isEngineReady
             )
         }
 
@@ -234,10 +223,10 @@ private fun PipBoyHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(36.dp),
+            .height(36.dp),  // Reduced from 48dp
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Iris mechanical eye (40×24dp scaled)
+        // Iris mechanical eye (40x24dp)
         AndroidView(
             factory = { context ->
                 IrisView(context).apply {
@@ -254,11 +243,12 @@ private fun PipBoyHeader(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Tabs: [VISUAL] [DATA] [STAT]
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            val tabs = listOf("VISUAL", "DATA", "STAT")
-            tabs.forEachIndexed { index, label ->
-                val isActive = index == 0 // VISUAL active by default
+        // Tabs: [ VISUAL ] [ DATA ] [ STAT ]
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf("VISUAL", "DATA", "STAT").forEachIndexed { index, label ->
+                val isActive = index == 0  // VISUAL active by default
                 Text(
                     text = "[$label]",
                     fontFamily = VT323,
@@ -270,18 +260,33 @@ private fun PipBoyHeader(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Holotape thumbnail (60×60, notched corners)
+        // Holotape thumbnail (60x60, notched corners)
         if (screenshot != null) {
             HolotapeThumbnail(
                 bitmap = screenshot,
                 isExpanded = isThumbnailExpanded,
                 onClick = onThumbnailClick
             )
+            
+            Spacer(modifier = Modifier.width(4.dp))
         }
 
-        Spacer(modifier = Modifier.width(4.dp))
+        // Debug button (only in debug builds)
+        if (BuildConfig.DEBUG) {
+            IconButton(
+                onClick = onDebugClick,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Text(
+                    text = "⚙",
+                    fontFamily = VT323,
+                    fontSize = 14.sp,
+                    color = TextPhosphorDim
+                )
+            }
+        }
 
-        // Close button (compact)
+        // Close X
         IconButton(
             onClick = onClose,
             modifier = Modifier.size(28.dp)
@@ -303,55 +308,45 @@ private fun HolotapeThumbnail(
     onClick: () -> Unit
 ) {
     val size = if (isExpanded) 100.dp else 50.dp
-
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(GunmetalSurface)
-            .drawBehind {
-                // Notched corners effect (draw dark triangles at corners)
-                val notchSize = 8.dp.toPx()
-                // Top-left notch
-                drawRect(
-                    color = GunmetalBg,
-                    topLeft = Offset(0f, 0f),
-                    size = Size(notchSize, notchSize)
-                )
-                // Bottom-right notch
-                drawRect(
-                    color = GunmetalBg,
-                    topLeft = Offset(size.width - notchSize, size.height - notchSize),
-                    size = Size(notchSize, notchSize)
-                )
-            }
-            .clickable(onClick = onClick)
-            .padding(2.dp)
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column {
-            // DATA label
-            Text(
-                text = "DATA",
-                fontFamily = VT323,
-                fontSize = 7.sp,
-                color = PhosphorDim.copy(alpha = 0.8f),
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-
-            // Image with monochrome green tint
+        // DATA label
+        Text(
+            text = "DATA",
+            fontFamily = VT323,
+            fontSize = 8.sp,
+            color = PhosphorDim.copy(alpha = 0.7f)
+        )
+        
+        // Notched corner thumbnail
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(HolotapeShape())
+                .background(GunmetalSurfaceVariant)
+                .border(
+                    width = 1.dp,
+                    color = BorderPhosphor.copy(alpha = 0.5f),
+                    shape = HolotapeShape()
+                )
+                .clickable(onClick = onClick)
+                .padding(2.dp)
+        ) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Screen data",
+                contentDescription = "Data tape",
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(0.8f)
-                    .drawWithContent {
-                        drawContent()
-                        // Green monochrome overlay
-                        drawRect(
-                            color = PhosphorGreen.copy(alpha = 0.2f),
-                            blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop
-                        )
-                    }
+                    .alpha(0.8f)  // Monochrome green filter effect
+            )
+            
+            // Green overlay for holotape effect
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(PhosphorGreen.copy(alpha = 0.1f))
             )
         }
     }
@@ -365,46 +360,55 @@ private fun TerminalResponseArea(
     scrollState: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier = modifier.fillMaxWidth()) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(GunmetalSurface.copy(alpha = 0.4f))
+            .padding(4.dp)
+    ) {
         // Line numbers column
         Column(
-            modifier = Modifier
-                .width(20.dp)
-                .fillMaxHeight()
-                .background(GunmetalSurface.copy(alpha = 0.3f))
-                .padding(vertical = 4.dp),
+            modifier = Modifier.width(20.dp),
             horizontalAlignment = Alignment.End
         ) {
-            // Generate line numbers based on content
-            val lineCount = responseText.count { it == '\n' } + 1
-            repeat((lineCount + 2).coerceAtMost(20)) { index ->
+            if (responseText.isNotEmpty()) {
+                val lines = responseText.split("\n").size.coerceAtLeast(1)
+                repeat(lines.coerceAtMost(99)) { index ->
+                    Text(
+                        text = String.format("%02d", index + 1),
+                        fontFamily = VT323,
+                        fontSize = 11.sp,
+                        color = PhosphorDim.copy(alpha = 0.5f),
+                        lineHeight = 14.sp
+                    )
+                }
+            } else {
                 Text(
-                    text = String.format("%02d", index + 1),
+                    text = "01",
                     fontFamily = VT323,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     color = PhosphorDim.copy(alpha = 0.5f)
                 )
             }
         }
-
+        
         Spacer(modifier = Modifier.width(4.dp))
-
+        
         // Content area
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
-                .background(GunmetalSurface.copy(alpha = 0.2f))
-                .padding(6.dp)
+                .padding(4.dp)
         ) {
             if (!isEngineReady && responseText.isEmpty()) {
+                // Loading state
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(20.dp),
                         color = PhosphorGreen,
                         strokeWidth = 2.dp
                     )
@@ -417,11 +421,12 @@ private fun TerminalResponseArea(
                     )
                 }
             } else if (responseText.isEmpty() && !isGenerating) {
+                // Empty state
                 Text(
-                    text = "> READY",
+                    text = "> STANDBY",
                     fontFamily = VT323,
                     fontSize = 12.sp,
-                    color = PhosphorDim.copy(alpha = 0.6f)
+                    color = TextPhosphorDim.copy(alpha = 0.4f)
                 )
             } else {
                 Column(
@@ -429,23 +434,20 @@ private fun TerminalResponseArea(
                         .fillMaxSize()
                         .verticalScroll(scrollState)
                 ) {
+                    // Response text
                     Text(
                         text = responseText,
                         fontFamily = VT323,
                         fontSize = 12.sp,
+                        color = TextPhosphor,
                         lineHeight = 14.sp,
-                        color = PhosphorGreen,
-                        letterSpacing = 0.05.sp
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Blinking block cursor
+                    // Blinking block cursor when generating
                     if (isGenerating) {
-                        Text(
-                            text = "▊",
-                            fontFamily = VT323,
-                            fontSize = 12.sp,
-                            color = PhosphorGreen
-                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        BlinkingCursor()
                     }
                 }
             }
@@ -454,27 +456,46 @@ private fun TerminalResponseArea(
 }
 
 @Composable
+private fun BlinkingCursor() {
+    val infiniteTransition = rememberInfiniteTransition(label = "cursor")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cursorBlink"
+    )
+    
+    Text(
+        text = "█",
+        fontFamily = VT323,
+        fontSize = 12.sp,
+        color = PhosphorGreen.copy(alpha = alpha)
+    )
+}
+
+@Composable
 private fun TerminalInputLine(
     query: String,
     onQueryChange: (String) -> Unit,
     onSend: () -> Unit,
-    enabled: Boolean,
-    cursorAlpha: Float
+    enabled: Boolean
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(32.dp)
-            .background(Color.Transparent)
+            .height(32.dp)  // Reduced from 44dp
             .drawBehind {
-                // Top border only
+                // Top border only (1dp phosphor line)
                 drawRect(
-                    color = PhosphorGreen.copy(alpha = 0.5f),
+                    color = BorderPhosphor.copy(alpha = 0.5f),
                     topLeft = Offset(0f, 0f),
                     size = Size(size.width, 1.dp.toPx())
                 )
             }
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Prompt
@@ -482,52 +503,57 @@ private fun TerminalInputLine(
             text = ">",
             fontFamily = VT323,
             fontSize = 14.sp,
-            color = PhosphorGreen
+            color = PhosphorGreen,
+            modifier = Modifier.padding(end = 4.dp)
         )
-
-        Spacer(modifier = Modifier.width(4.dp))
-
+        
         // Input field
-        Box(modifier = Modifier.weight(1f)) {
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                enabled = enabled,
-                textStyle = TextStyle(
-                    color = PhosphorGreen,
-                    fontSize = 12.sp,
-                    fontFamily = VT323
-                ),
-                decorationBox = { innerTextField ->
-                    Box {
-                        innerTextField()
-                        // Blinking cursor when focused and empty
-                        if (query.isEmpty() && enabled) {
-                            Text(
-                                text = "_",
-                                fontFamily = VT323,
-                                fontSize = 12.sp,
-                                color = PhosphorGreen.copy(alpha = cursorAlpha),
-                                modifier = Modifier.alpha(cursorAlpha)
-                            )
-                        }
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            enabled = enabled,
+            textStyle = TextStyle(
+                color = TextPhosphor,
+                fontSize = 13.sp,
+                fontFamily = VT323,
+                letterSpacing = 0.1.sp
+            ),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "_",
+                            fontFamily = VT323,
+                            fontSize = 13.sp,
+                            color = TextPhosphorDim.copy(alpha = 0.3f)
+                        )
                     }
-                },
-                singleLine = true
-            )
+                    innerTextField()
+                }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp),
+            singleLine = true
+        )
+        
+        // Blinking cursor when typing
+        if (query.isNotEmpty() && enabled) {
+            BlinkingCursor()
+            Spacer(modifier = Modifier.width(4.dp))
         }
-
+        
         // Execute button
         IconButton(
             onClick = onSend,
             enabled = enabled && query.isNotBlank(),
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(28.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = "Execute",
-                tint = if (enabled && query.isNotBlank()) PhosphorGreen else PhosphorDim.copy(alpha = 0.3f),
-                modifier = Modifier.size(16.dp)
+            Text(
+                text = "⏎",
+                fontFamily = VT323,
+                fontSize = 14.sp,
+                color = if (enabled && query.isNotBlank()) PhosphorGreen else TextPhosphorDim.copy(alpha = 0.3f)
             )
         }
     }
@@ -535,54 +561,96 @@ private fun TerminalInputLine(
 
 @Composable
 private fun CornerBolts() {
-    val boltSize = 4.dp
+    val boltColor = Color(0xFF6A6A6A)
+    
     Box(modifier = Modifier.fillMaxSize()) {
-        // Top-left
+        // Top-left bolt
         Box(
             modifier = Modifier
-                .size(boltSize)
+                .size(4.dp)
+                .offset(x = 2.dp, y = 2.dp)
+                .background(boltColor, CircleShape)
                 .align(Alignment.TopStart)
-                .background(BoltColor, RoundedCornerShape(2.dp))
         )
-        // Top-right
+        
+        // Top-right bolt
         Box(
             modifier = Modifier
-                .size(boltSize)
+                .size(4.dp)
+                .offset(x = (-2).dp, y = 2.dp)
+                .background(boltColor, CircleShape)
                 .align(Alignment.TopEnd)
-                .background(BoltColor, RoundedCornerShape(2.dp))
         )
-        // Bottom-left
+        
+        // Bottom-left bolt
         Box(
             modifier = Modifier
-                .size(boltSize)
+                .size(4.dp)
+                .offset(x = 2.dp, y = (-2).dp)
+                .background(boltColor, CircleShape)
                 .align(Alignment.BottomStart)
-                .background(BoltColor, RoundedCornerShape(2.dp))
         )
-        // Bottom-right
+        
+        // Bottom-right bolt
         Box(
             modifier = Modifier
-                .size(boltSize)
+                .size(4.dp)
+                .offset(x = (-2).dp, y = (-2).dp)
+                .background(boltColor, CircleShape)
                 .align(Alignment.BottomEnd)
-                .background(BoltColor, RoundedCornerShape(2.dp))
         )
     }
 }
 
-// DrawScope extensions for CRT effects
+// Holotape shape with notched corners
+private class HolotapeShape : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density
+    ): androidx.compose.ui.graphics.Outline {
+        val notchSize = 8f
+        val path = androidx.compose.ui.graphics.Path().apply {
+            // Start after top-left notch
+            moveTo(notchSize, 0f)
+            // Top edge to top-right
+            lineTo(size.width, 0f)
+            // Right edge
+            lineTo(size.width, size.height - notchSize)
+            // Bottom-right notch
+            lineTo(size.width - notchSize, size.height)
+            // Bottom edge to bottom-left
+            lineTo(0f, size.height)
+            // Left edge to top-left notch
+            lineTo(0f, notchSize)
+            // Close to start
+            close()
+        }
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
+}
 
+/**
+ * Draw inner bevel to simulate recessed CRT screen
+ */
 private fun DrawScope.drawInnerBevel() {
-    // Inner shadow to simulate recessed CRT
+    // Inner shadow
     drawRect(
-        color = Color.Black.copy(alpha = 0.3f),
-        topLeft = Offset(2.dp.toPx(), 2.dp.toPx()),
-        size = Size(size.width - 4.dp.toPx(), size.height - 4.dp.toPx())
+        brush = Brush.radialGradient(
+            colors = listOf(Color.Black.copy(alpha = 0.0f), Color.Black.copy(alpha = 0.3f)),
+            center = center,
+            radius = size.width * 0.7f
+        ),
+        size = size
     )
 }
 
-private fun DrawScope.drawHeavyScanlines() {
-    // Heavy CRT scanlines: 2px on, 2px off, 40% opacity
+/**
+ * Draw heavy CRT scanlines (40% opacity)
+ */
+private fun DrawScope.drawScanlines() {
     val lineHeight = 2.dp.toPx()
-    val spacing = 4.dp.toPx()
+    val spacing = 4.dp.toPx()  // 2px on, 2px off
     var y = 0f
     while (y < size.height) {
         drawRect(
@@ -594,12 +662,36 @@ private fun DrawScope.drawHeavyScanlines() {
     }
 }
 
+/**
+ * Draw phosphor bloom effect around edges
+ */
+private fun DrawScope.drawCRTBloom() {
+    // Subtle phosphor glow at edges
+    val strokeWidth = 2.dp.toPx()
+    
+    // Top glow
+    drawRect(
+        color = BorderPhosphor.copy(alpha = 0.15f),
+        topLeft = Offset(0f, 0f),
+        size = Size(size.width, strokeWidth * 2)
+    )
+    
+    // Bottom glow
+    drawRect(
+        color = BorderPhosphor.copy(alpha = 0.1f),
+        topLeft = Offset(0f, size.height - strokeWidth * 2),
+        size = Size(size.width, strokeWidth * 2)
+    )
+}
+
+/**
+ * Draw vignette effect (darkening at corners)
+ */
 private fun DrawScope.drawVignette() {
-    // Corner darkening for CRT effect
     val gradient = Brush.radialGradient(
-        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
+        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.35f)),
         center = center,
-        radius = size.width * 0.7f
+        radius = size.width * 0.75f
     )
     drawRect(brush = gradient)
 }
