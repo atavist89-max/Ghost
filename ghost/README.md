@@ -11,7 +11,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 - 🔒 **Zero Network Access**: No `INTERNET` permission; all inference is local
 - ⚡ **Hardware Accelerated**: Uses Hexagon NPU with GPU fallback
 - 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
-- 🖼️ **Single Frame Capture**: Captures screen state exactly once (no video stream)
+- 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
 - 🔋 **Zero Background Drain**: No services, no notifications when closed
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
@@ -68,10 +68,11 @@ Copy `gemma-4-e2b.litertlm` to `Internal Storage/Download/GhostModels/`
 ### Flow
 1. **Permission Dialog**: System asks for screen capture permission
 2. **Capture**: Single frame is captured (1280×720)
-3. **PiP Window**: Floating window appears with the screenshot thumbnail
-4. **Ask**: Type your question about the screen content
-5. **Analyze**: Local LLM processes the image and streams the answer
-6. **Close**: Tap × or swipe off-screen to dismiss
+3. **PiP Window**: Floating terminal appears with Iris and mode toggle
+4. **Select Mode**: `TXT` (default) for text-only, `VIS` for screenshot analysis
+5. **Ask**: Type your question about the screen content
+6. **Analyze**: Local LLM processes the query and streams the answer
+7. **Close**: Tap × or swipe off-screen to dismiss
 
 ## Architecture
 
@@ -191,6 +192,13 @@ Device will automatically switch from NPU to GPU if it gets warm
 Private use only. Not for redistribution.
 
 ## Version History
+
+### v1.2 (2026-04-13)
+- Added Visual/Text mode toggle in terminal header (`TXT` / `VIS`)
+- **TEXT mode is default** — works without screenshot while LiteRT-LM vision API is broken
+- Updated `InferenceEngine.kt` with `analyze()` supporting both text-only and visual modes
+- Mode indicator in response area (`[TEXT MODE]` / `[VISUAL MODE - NO SCREENSHOT]`)
+- Toggle persists for the session; HAL TTS works in both modes
 
 ### v1.1 (2026-04-13)
 - Added Sherpa-ONNX Piper TTS integration (`PiperTTS.kt`) for HAL 9000 voice synthesis

@@ -14,6 +14,7 @@ Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy
 - **Iris Mechanical Mascot**: Bracket-shaped mechanical eyes with cursor-tracking pupils, mechanical servo LED-bar eyebrows, and 7 expressive states (IDLE, LISTENING, FOCUSED, THINKING, ANALYZING, SUCCESS, CONFUSED)
 - **Pip-Boy Terminal Interface**: Compact 260dp×380dp wrist-mounted industrial terminal with heavy CRT scanlines, VT323 font, metallic bolts, and phosphor green glow
 - **HAL 9000 Voice Synthesis**: Piper TTS integration with a morphing Play/HAL button that pulses in HAL's iconic staccato rhythm (short-short-long)
+- **Visual / Text Mode Toggle**: Switch between vision (screenshot + text) and text-only assistant modes. **TEXT mode is default** while LiteRT-LM multimodal support is pending.
 - **Zero Network Access**: All processing happens locally on your device's NPU
 - **Zero Data Retention**: Screenshots exist only in memory, never stored
 - **Zero Background Drain**: No services running when closed—trigger only when needed
@@ -75,6 +76,7 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 | **Font** | VT323 terminal font, 24sp for body text |
 | **CRT Effects** | 40% opacity scanlines, vignette darkening, phosphor bloom |
 | **Header** | 40×24dp Iris with servo eyebrows + tabs `[VISUAL] [DATA] [STAT]` |
+| **Mode Toggle** | `TXT` / `VIS` button next to Iris. TXT highlighted by default |
 | **Play/HAL Button** | Morphing terminal play button (⏵) ↔ pulsing red HAL 9000 eye |
 | **Terminal** | Line-numbered response area (01, 02, 03...) + flat `>` command line |
 | **Cursor** | Blinking block `█` cursor |
@@ -232,6 +234,25 @@ Delete temp file after inference:
 - PiP logic (`GhostWindowManager.kt`)
 - AccessibilityService (`GhostAccessibilityService.kt`)
 - Model path handling (`GhostPaths.kt`)
+
+---
+
+## Visual vs Text Mode
+
+Ghost now supports both visual (multimodal) and text-only inference:
+
+| Mode | Behavior | Default |
+|------|----------|---------|
+| **TEXT** | Pure text assistant. No screenshot required. Works immediately. | ✅ Yes |
+| **VISUAL** | Sends screenshot to model for image analysis. Requires valid bitmap. | Manual toggle |
+
+### Why TEXT is default
+The vision API in LiteRT-LM `0.10.0` is non-functional for multimodal input. TEXT mode lets Ghost work as a fully capable text-only assistant today. When `0.11.0` fixes vision support, tap the toggle to switch to VIS mode.
+
+### UI indicator
+The terminal response area displays:
+- `[TEXT MODE]` — when in text mode
+- `[VISUAL MODE - NO SCREENSHOT]` — when visual mode is on but no bitmap is available
 
 ---
 
