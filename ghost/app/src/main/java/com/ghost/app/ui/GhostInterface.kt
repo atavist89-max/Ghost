@@ -241,23 +241,6 @@ private fun PipBoyHeader(
             modifier = Modifier.size(40.dp, 24.dp)
         )
 
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Tabs: [ VISUAL ] [ DATA ] [ STAT ]
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf("VISUAL", "DATA", "STAT").forEachIndexed { index, label ->
-                val isActive = index == 0  // VISUAL active by default
-                Text(
-                    text = "[$label]",
-                    fontFamily = VT323,
-                    fontSize = 20.sp,
-                    color = if (isActive) PhosphorBright else PhosphorDim.copy(alpha = 0.6f)
-                )
-            }
-        }
-
         Spacer(modifier = Modifier.weight(1f))
 
         // Holotape thumbnail (60x60, notched corners)
