@@ -11,7 +11,7 @@ Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy
 
 ### Key Features
 
-- **Iris Mechanical Mascot**: Bracket-shaped mechanical eyes with cursor-tracking pupils and 7 expressive states (IDLE, LISTENING, FOCUSED, THINKING, ANALYZING, SUCCESS, CONFUSED)
+- **Iris Mechanical Mascot**: Bracket-shaped mechanical eyes with cursor-tracking pupils, mechanical servo LED-bar eyebrows, and 7 expressive states (IDLE, LISTENING, FOCUSED, THINKING, ANALYZING, SUCCESS, CONFUSED)
 - **Pip-Boy Terminal Interface**: Compact 260dp×380dp wrist-mounted industrial terminal with heavy CRT scanlines, VT323 font, metallic bolts, and phosphor green glow
 - **Zero Network Access**: All processing happens locally on your device's NPU
 - **Zero Data Retention**: Screenshots exist only in memory, never stored
@@ -57,13 +57,13 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 
 | State | Visual | Trigger |
 |-------|--------|---------|
-| **IDLE** | Slow mechanical blink, breathing scale | App open, awaiting input |
-| **LISTENING** | Pupils track cursor X position | User typing |
-| **FOCUSED** | Vertical line pupils, sharpened brackets | Paused typing |
-| **THINKING** | Sweeping scan animation, tilted brackets | Execute pressed |
-| **ANALYZING** | Solid bar pupils, rapid glow pulse | Inference active |
-| **SUCCESS** | Checkmark ✓ pupils, satisfied nod | Response complete |
-| **CONFUSED** | Question mark ?, rapid 3× blink | Error state |
+| **IDLE** | Slow mechanical blink, breathing scale, brows horizontal/dim | App open, awaiting input |
+| **LISTENING** | Pupils track cursor X position, brows raised 15° with cursor-driven asymmetry | User typing |
+| **FOCUSED** | Vertical line pupils, sharpened brackets, brows angled down 20° (intense V) | Paused typing |
+| **THINKING** | Sweeping scan animation, tilted brackets, left brow raised 30° (quizzical) | Execute pressed |
+| **ANALYZING** | Solid bar pupils, rapid glow pulse, brows low and serious (-15°) | Inference active |
+| **SUCCESS** | Checkmark ✓ pupils, satisfied nod, brows raised 25° with bright pulse | Response complete |
+| **CONFUSED** | Question mark ?, rapid 3× blink, brows wave alternately in perplexed motion | Error state |
 
 ### Pip-Boy Terminal UI
 
@@ -73,7 +73,7 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 | **Frame** | Industrial housing with 4 metallic bolt heads, 2dp square corners |
 | **Font** | VT323 terminal font, 24sp for body text |
 | **CRT Effects** | 40% opacity scanlines, vignette darkening, phosphor bloom |
-| **Header** | 40×24dp Iris + tabs `[VISUAL] [DATA] [STAT]` |
+| **Header** | 40×24dp Iris with servo eyebrows + tabs `[VISUAL] [DATA] [STAT]` |
 | **Data Tape** | Holotape thumbnail with notched corners and monochrome green tint |
 | **Terminal** | Line-numbered response area (01, 02, 03...) + flat `>` command line |
 | **Cursor** | Blinking block `█` cursor |

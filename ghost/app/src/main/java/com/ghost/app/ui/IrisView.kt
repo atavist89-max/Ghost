@@ -6,6 +6,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
+import android.view.animation.OvershootInterpolator
 import androidx.core.animation.doOnEnd
 import androidx.dynamicanimation.animation.FloatValueHolder
 import androidx.dynamicanimation.animation.SpringAnimation
@@ -120,6 +121,20 @@ class IrisView @JvmOverloads constructor(
     private var tiltAngle = 0f
     private var wobbleOffset = 0f
     
+    // Eyebrow properties
+    private var leftBrowAngle = 0f // degrees: negative=angled down, positive=up
+    private var rightBrowAngle = 0f
+    private var browGlowIntensity = 0.3f
+    private val metallicGray = 0xFF6A6A6A.toInt()
+    
+    // Animation objects for smooth eyebrow transitions
+    private var leftBrowAnimator: ValueAnimator? = null
+    private var rightBrowAnimator: ValueAnimator? = null
+    private var confusedWaveAnimator: ValueAnimator? = null
+    
+    // Spring physics for mechanical servo feel
+    private val browInterpolator = OvershootInterpolator(1.5f) // Bouncy servo snap
+    
     // Animators
     private var blinkAnimator: ValueAnimator? = null
     private var breatheAnimator: ValueAnimator? = null
@@ -168,6 +183,9 @@ class IrisView @JvmOverloads constructor(
         // Draw eyes
         drawEye(canvas, leftEyeBounds, true)
         drawEye(canvas, rightEyeBounds, false)
+        
+        // Draw mechanical eyebrows above eyes
+        drawMechanicalBrows(canvas, width / 2f, height / 2f, eyeWidth)
         
         canvas.restore()
     }
@@ -329,6 +347,74 @@ class IrisView @JvmOverloads constructor(
         }
     }
 
+    private fun drawMechanicalBrows(canvas: Canvas, centerX: Float, centerY: Float, eyeWidth: Float) {
+        val browLength = eyeWidth * 0.85f
+        val browHeight = 3f * density
+        val browOffset = eyeWidth * 0.55f // Distance above eye center
+        
+        val leftPivotX = centerX - eyeWidth * 0.4f
+        val rightPivotX = centerX + eyeWidth * 0.4f
+        val browY = centerY - browOffset
+        
+        val browPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = PHOSPHOR_GREEN
+            style = Paint.Style.FILL
+            setShadowLayer(2f * density, 0f, 0f, PHOSPHOR_GREEN)
+        }
+        
+        val pivotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = metallicGray
+            style = Paint.Style.FILL
+        }
+        
+        val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = metallicGray
+            strokeWidth = 1f * density
+            style = Paint.Style.STROKE
+            alpha = 100
+        }
+        
+        // Left servo brow
+        canvas.save()
+        canvas.rotate(leftBrowAngle, leftPivotX, browY)
+        
+        // Draw pivot mounting point (small circle)
+        canvas.drawCircle(leftPivotX, browY, 2f * density, pivotPaint)
+        
+        // Draw the LED bar extending to the right from pivot
+        browPaint.alpha = (80 + browGlowIntensity * 175).toInt().coerceIn(0, 255)
+        canvas.drawRect(
+            leftPivotX,
+            browY - browHeight / 2f,
+            leftPivotX + browLength * 0.6f,
+            browY + browHeight / 2f,
+            browPaint
+        )
+        canvas.restore()
+        
+        // Right servo brow (mirror - extends left from pivot)
+        canvas.save()
+        canvas.rotate(rightBrowAngle, rightPivotX, browY)
+        
+        canvas.drawCircle(rightPivotX, browY, 2f * density, pivotPaint)
+        
+        canvas.drawRect(
+            rightPivotX - browLength * 0.6f,
+            browY - browHeight / 2f,
+            rightPivotX,
+            browY + browHeight / 2f,
+            browPaint
+        )
+        canvas.restore()
+        
+        // Draw connecting bar between brows (optional mechanical frame detail)
+        canvas.drawLine(
+            leftPivotX + browLength * 0.3f, browY,
+            rightPivotX - browLength * 0.3f, browY,
+            framePaint
+        )
+    }
+
     private fun drawShutters(canvas: Canvas, bounds: RectF) {
         val shutterHeight = bounds.height() * blinkProgress * 0.6f
         
@@ -355,6 +441,53 @@ class IrisView @JvmOverloads constructor(
         currentState = newState
         stopAllAnimations()
         
+        val (targetLeft, targetRight, targetGlow) = when(newState) {
+            State.IDLE -> Triple(0f, 0f, 0.3f)
+            State.LISTENING -> Triple(15f, 15f, 0.5f)
+            State.FOCUSED -> Triple(-20f, -20f, 0.7f)
+            State.THINKING -> Triple(30f, 0f, 0.6f)
+            State.ANALYZING -> Triple(-15f, -15f, 0.8f)
+            State.SUCCESS -> Triple(25f, 25f, 1.0f)
+            State.CONFUSED -> {
+                startConfusedWaveAnimation()
+                startWobbleAnimation()
+                performRapidBlink()
+                return
+            }
+        }
+        
+        // Animate left brow
+        leftBrowAnimator = ValueAnimator.ofFloat(leftBrowAngle, targetLeft).apply {
+            duration = 300
+            interpolator = browInterpolator
+            addUpdateListener {
+                leftBrowAngle = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+        
+        // Animate right brow
+        rightBrowAnimator = ValueAnimator.ofFloat(rightBrowAngle, targetRight).apply {
+            duration = 300
+            interpolator = browInterpolator
+            addUpdateListener {
+                rightBrowAngle = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+        
+        // Animate glow intensity
+        ValueAnimator.ofFloat(browGlowIntensity, targetGlow).apply {
+            duration = 300
+            addUpdateListener {
+                browGlowIntensity = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+        
         when (newState) {
             State.IDLE -> startIdleAnimations()
             State.LISTENING -> {
@@ -372,10 +505,7 @@ class IrisView @JvmOverloads constructor(
                 performBlink()
                 postDelayed({ setState(State.IDLE) }, 2000)
             }
-            State.CONFUSED -> {
-                startWobbleAnimation()
-                performRapidBlink()
-            }
+            State.CONFUSED -> {} // handled above
         }
         
         invalidate()
@@ -384,6 +514,12 @@ class IrisView @JvmOverloads constructor(
     fun setCursorPosition(percent: Float) {
         cursorPercent = percent.coerceIn(0f, 1f)
         if (currentState == State.LISTENING) {
+            // Add brow asymmetry in LISTENING state
+            val leftTarget = 15f + (1f - cursorPercent) * 10f // Higher when cursor left
+            val rightTarget = 15f + cursorPercent * 10f // Higher when cursor right
+            
+            leftBrowAngle = leftTarget
+            rightBrowAngle = rightTarget
             invalidate()
         }
     }
@@ -472,6 +608,27 @@ class IrisView @JvmOverloads constructor(
         }
     }
 
+    private fun startConfusedWaveAnimation() {
+        confusedWaveAnimator?.cancel()
+        confusedWaveAnimator = ValueAnimator.ofFloat(0f, 360f).apply {
+            duration = 1200
+            repeatCount = 3
+            addUpdateListener { animator ->
+                val angle = animator.animatedValue as Float
+                leftBrowAngle = Math.sin(Math.toRadians(angle.toDouble())).toFloat() * 20f
+                rightBrowAngle = -Math.sin(Math.toRadians(angle.toDouble())).toFloat() * 20f
+                browGlowIntensity = 0.4f + (Math.sin(Math.toRadians(angle * 2.0)) * 0.3f).toFloat()
+                invalidate()
+            }
+            doOnEnd {
+                if (currentState == State.CONFUSED) {
+                    setState(State.IDLE)
+                }
+            }
+            start()
+        }
+    }
+
     private fun startWobbleAnimation() {
         scanAnimator = ValueAnimator.ofFloat(-1f, 1f, -1f).apply {
             duration = 600
@@ -500,6 +657,9 @@ class IrisView @JvmOverloads constructor(
         blinkAnimator?.cancel()
         scanAnimator?.cancel()
         pulseAnimator?.cancel()
+        leftBrowAnimator?.cancel()
+        rightBrowAnimator?.cancel()
+        confusedWaveAnimator?.cancel()
         removeCallbacks(null)
         
         blinkProgress = 0f
