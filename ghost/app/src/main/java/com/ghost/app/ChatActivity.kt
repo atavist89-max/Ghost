@@ -73,6 +73,7 @@ class ChatActivity : ComponentActivity() {
     private val _responseText = mutableStateOf("")
     private val _isGenerating = mutableStateOf(false)
     private val _isEngineReady = mutableStateOf(false)
+    private val _isVisualMode = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,12 +106,16 @@ class ChatActivity : ComponentActivity() {
         setContent {
             GhostTheme {
                 ChatScreenPiP(
-                    screenshot = capturedBitmap,
+                    screenshot = if (_isVisualMode.value) capturedBitmap else null,
                     responseText = _responseText.value,
                     isGenerating = _isGenerating.value,
                     isEngineReady = _isEngineReady.value,
                     tts = piperTTS,
-                    onSendQuery = { query -> handleQuery(query) },
+                    isVisualMode = _isVisualMode.value,
+                    onVisualModeChange = { _isVisualMode.value = it },
+                    onSendQuery = { query ->
+                        handleQuery(query, _isVisualMode.value)
+                    },
                     onClose = { finishAndRemoveTask() }
                 )
             }
@@ -133,35 +138,38 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
-    private fun handleQuery(query: String) {
-        Log.i(TAG, "User query: $query")
-        DebugLogger.i(TAG, "User query: $query")
+    private fun handleQuery(query: String, useVisualMode: Boolean) {
+        Log.i(TAG, "User query: $query (visualMode=$useVisualMode)")
+        DebugLogger.i(TAG, "User query: $query (visualMode=$useVisualMode)")
 
-        if (capturedBitmap == null) {
+        if (useVisualMode && capturedBitmap == null) {
             _responseText.value = "Error: No screenshot available"
             DebugLogger.e(TAG, "No screenshot available!")
             return
         }
 
-        val bitmap = capturedBitmap!!
-        if (bitmap.isRecycled) {
+        val bitmap = if (useVisualMode) capturedBitmap else null
+        if (bitmap != null && bitmap.isRecycled) {
             Log.e(TAG, "Bitmap is recycled!")
             DebugLogger.e(TAG, "Bitmap is recycled!")
             _responseText.value = "Error: Screenshot was recycled"
             return
         }
 
-        val bitmapInfo = "Bitmap: ${bitmap.width}x${bitmap.height}, config=${bitmap.config}, " +
-                "byteCount=${bitmap.byteCount / 1024}KB"
-        Log.i(TAG, "Sending bitmap to inference: $bitmapInfo")
-        DebugLogger.i(TAG, bitmapInfo)
+        if (bitmap != null) {
+            val bitmapInfo = "Bitmap: ${bitmap.width}x${bitmap.height}, config=${bitmap.config}, " +
+                    "byteCount=${bitmap.byteCount / 1024}KB"
+            Log.i(TAG, "Sending bitmap to inference: $bitmapInfo")
+            DebugLogger.i(TAG, bitmapInfo)
+        }
 
         _responseText.value = ""
         _isGenerating.value = true
 
-        inferenceEngine?.analyzeImage(
+        inferenceEngine?.analyze(
             bitmap = bitmap,
             query = query,
+            useVisualMode = useVisualMode,
             onToken = { token ->
                 mainScope.launch {
                     _responseText.value += token
@@ -222,6 +230,8 @@ private fun ChatScreenPiP(
     isGenerating: Boolean,
     isEngineReady: Boolean,
     tts: PiperTTS?,
+    isVisualMode: Boolean,
+    onVisualModeChange: (Boolean) -> Unit,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -289,6 +299,8 @@ private fun ChatScreenPiP(
                     isEngineReady = isEngineReady,
                     isKeyboardOpen = isKeyboardOpen,
                     tts = tts,
+                    isVisualMode = isVisualMode,
+                    onVisualModeChange = onVisualModeChange,
                     onSendQuery = onSendQuery,
                     onClose = onClose
                 )

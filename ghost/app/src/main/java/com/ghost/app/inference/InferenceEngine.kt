@@ -154,23 +154,19 @@ class InferenceEngine(private val context: Context) {
     }
 
     /**
-     * Analyze an image with a text query using vision model prompt template.
-     * 
-     * CRITICAL: Vision models require <image_soft_token> in the prompt template.
-     * The image path is embedded in the prompt using <|image|> or similar tokens.
-     * 
-     * Per LiteRT-LM docs and Gemma3/4 template:
-     * https://github.com/google-ai-edge/LiteRT-LM/issues/1874
+     * Analyze a query using the inference engine.
      *
-     * @param bitmap The screenshot to analyze
-     * @param query User's question about the screen
+     * @param bitmap The screenshot to analyze (only used in visual mode)
+     * @param query User's question
+     * @param useVisualMode Whether to use visual mode with screenshot
      * @param onToken Callback for each token as it's generated
      * @param onComplete Callback when generation is complete
      * @param onError Callback if an error occurs
      */
-    fun analyzeImage(
-        bitmap: Bitmap,
+    fun analyze(
+        bitmap: Bitmap?,
         query: String,
+        useVisualMode: Boolean = false,
         onToken: (String) -> Unit,
         onComplete: () -> Unit,
         onError: (String) -> Unit
@@ -183,67 +179,40 @@ class InferenceEngine(private val context: Context) {
         inferenceScope.launch {
             try {
                 val engineInstance = engine ?: throw IllegalStateException("Engine is null")
-
-                // Save bitmap to cache file - image must persist for inference
-                val imagePath = saveBitmapToCache(bitmap)
-                
-                if (imagePath == null) {
-                    Log.e(TAG, "Failed to save screenshot to cache")
-                    onError("Failed to prepare image for analysis")
-                    return@launch
-                }
-
-                // Verify image file exists and has content
-                val imageFile = File(imagePath)
-                if (!imageFile.exists() || imageFile.length() == 0L) {
-                    val errorMsg = "Image file missing or empty: $imagePath"
-                    Log.e(TAG, errorMsg)
-                    DebugLogger.e(TAG, errorMsg)
-                    onError("Image file error")
-                    return@launch
-                }
-                
-                val imageSavedMsg = "Image saved: $imagePath (${imageFile.length()} bytes)"
-                Log.i(TAG, imageSavedMsg)
-                DebugLogger.i(TAG, imageSavedMsg)
-
-                Log.i(TAG, "Creating multimodal message with image: $imagePath")
-                DebugLogger.i(TAG, "Creating multimodal message with image: $imagePath")
-
-                // Create a conversation
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    // NOTE: Vision/multimodal support requires LiteRT-LM APIs that may not be 
-                    // available in v0.10.0. The Content.ImageFile API exists in newer versions.
-                    // For now, using text-only mode. Vision support would require:
-                    // 1. Upgrading to newer LiteRT-LM version, OR
-                    // 2. Using JNI to call C++ multimodal APIs directly
-                    
-                    Log.i(TAG, "Creating text message (vision API not available in v0.10.0)")
-                    DebugLogger.i(TAG, "Creating text message (vision API not available in v0.10.0)")
-                    DebugLogger.i(TAG, "Image was saved to: $imagePath but cannot be passed to model in this version")
-                    
-                    // Persona prompt for Star Trek computer-style responses
-                    val personaPrompt = "You are a robotic visual analysis assistant modeled after the Star Trek computer interface. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Analyze the screenshot and report only relevant findings with machine-like precision and efficiency."
-                    
-                    // Text-only message with persona
-                    val userMessageObj = Message.of("$personaPrompt I have a screenshot of my screen. $query")
-                    
+                    val personaPrompt = if (useVisualMode && bitmap != null) {
+                        "You are a robotic visual analysis assistant modeled after the Star Trek computer interface. The user has provided a screenshot of their screen. Provide brief, factual, and logically structured responses devoid of emotion or elaboration. Analyze the screenshot and report only relevant technical findings with machine-like precision."
+                    } else {
+                        "You are a robotic computer assistant modeled after the Star Trek computer interface. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency."
+                    }
+
+                    val userMessageObj = if (useVisualMode && bitmap != null) {
+                        val imagePath = saveBitmapToCache(bitmap)
+                        if (imagePath != null) {
+                            Message.of("$personaPrompt Screenshot available at: $imagePath. User query: $query")
+                        } else {
+                            Message.of("$personaPrompt User query: $query (screenshot failed)")
+                        }
+                    } else {
+                        Message.of("$personaPrompt User query: $query")
+                    }
+
                     val sendingMsg = "Message object created, sending to model..."
                     Log.d(TAG, sendingMsg)
                     DebugLogger.d(TAG, sendingMsg)
-                    
+
                     val responseMessage = conversation.sendMessage(userMessageObj)
                     val responseText = responseMessage.toString()
-                    
+
                     val responseMsg = "Response received: ${responseText.take(100)}..."
                     Log.i(TAG, responseMsg)
                     DebugLogger.i(TAG, responseMsg)
-                    
+
                     // Simulate streaming by splitting into words/tokens
                     val tokens = responseText.split(" ")
-                    
+
                     for (token in tokens) {
                         mainScope.launch {
                             onToken("$token ")
@@ -256,13 +225,12 @@ class InferenceEngine(private val context: Context) {
                     }
                 } finally {
                     conversation.close()
-                    // Don't clean up immediately - allow time for any pending operations
                     kotlinx.coroutines.delay(100)
-                    cleanupScreenshotCache()
+                    if (useVisualMode) cleanupScreenshotCache()
                 }
 
             } catch (e: Exception) {
-                val errorMsg = "Failed to analyze image: ${e.message}"
+                val errorMsg = "Inference failed: ${e.message}"
                 Log.e(TAG, errorMsg, e)
                 DebugLogger.e(TAG, errorMsg, e)
                 withContext(Dispatchers.Main) {

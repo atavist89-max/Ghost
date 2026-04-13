@@ -70,6 +70,8 @@ fun GhostInterface(
     isEngineReady: Boolean = false,
     isKeyboardOpen: Boolean = false,
     tts: PiperTTS? = null,
+    isVisualMode: Boolean = false,
+    onVisualModeChange: (Boolean) -> Unit = {},
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
@@ -77,6 +79,12 @@ fun GhostInterface(
 ) {
     var query by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
+
+    var localVisualMode by remember { mutableStateOf(isVisualMode) }
+
+    LaunchedEffect(isVisualMode) {
+        localVisualMode = isVisualMode
+    }
 
     // Iris state management
     var irisState by remember { mutableStateOf(IrisView.State.IDLE) }
@@ -152,6 +160,11 @@ fun GhostInterface(
                 responseText = responseText,
                 isGenerating = isGenerating,
                 tts = tts,
+                isVisualMode = localVisualMode,
+                onVisualModeChange = {
+                    localVisualMode = it
+                    onVisualModeChange(it)
+                },
                 onClose = onClose,
                 onDebugClick = onDebugClick
             )
@@ -173,6 +186,8 @@ fun GhostInterface(
                 responseText = responseText,
                 isGenerating = isGenerating,
                 isEngineReady = isEngineReady,
+                isVisualMode = localVisualMode,
+                capturedBitmap = capturedBitmap,
                 scrollState = scrollState,
                 modifier = Modifier.weight(1f)
             )
@@ -209,6 +224,8 @@ private fun PipBoyHeader(
     responseText: String,
     isGenerating: Boolean,
     tts: PiperTTS?,
+    isVisualMode: Boolean,
+    onVisualModeChange: (Boolean) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit
 ) {
@@ -231,6 +248,13 @@ private fun PipBoyHeader(
                 irisView.setCursorPosition(cursorPosition)
             },
             modifier = Modifier.size(40.dp, 24.dp)
+        )
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        ModeToggle(
+            isVisualMode = isVisualMode,
+            onToggle = onVisualModeChange
         )
 
         Spacer(modifier = Modifier.weight(1f))
@@ -416,10 +440,35 @@ private fun PlayHALButton(
 }
 
 @Composable
+private fun ModeToggle(
+    isVisualMode: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(if (isVisualMode) PhosphorGreen.copy(alpha = 0.2f) else GunmetalSurface)
+            .border(1.dp, BorderPhosphor.copy(alpha = 0.5f), RoundedCornerShape(2.dp))
+            .clickable { onToggle(!isVisualMode) },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isVisualMode) "VIS" else "TXT",
+            fontFamily = VT323,
+            fontSize = 10.sp,
+            color = if (isVisualMode) PhosphorGreen else PhosphorBright
+        )
+    }
+}
+
+@Composable
 private fun TerminalResponseArea(
     responseText: String,
     isGenerating: Boolean,
     isEngineReady: Boolean,
+    isVisualMode: Boolean,
+    capturedBitmap: Bitmap?,
     scrollState: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier
 ) {
@@ -497,6 +546,24 @@ private fun TerminalResponseArea(
                         .fillMaxSize()
                         .verticalScroll(scrollState)
                 ) {
+                    if (!isVisualMode) {
+                        Text(
+                            text = "[TEXT MODE]",
+                            fontFamily = VT323,
+                            fontSize = 10.sp,
+                            color = PhosphorDim.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    } else if (capturedBitmap == null) {
+                        Text(
+                            text = "[VISUAL MODE - NO SCREENSHOT]",
+                            fontFamily = VT323,
+                            fontSize = 10.sp,
+                            color = Color(0xFFFFAA00).copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+
                     // Response text
                     Text(
                         text = responseText,
