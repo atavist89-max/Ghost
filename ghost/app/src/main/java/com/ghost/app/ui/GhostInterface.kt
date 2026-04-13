@@ -393,7 +393,7 @@ private fun PlayHALButton(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "⏵",
+                        text = "▶",
                         fontFamily = VT323,
                         fontSize = 20.sp,
                         color = if (responseText.isNotBlank() && tts?.isReady() == true)
