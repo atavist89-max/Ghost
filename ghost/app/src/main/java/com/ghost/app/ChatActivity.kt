@@ -25,10 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.ui.GhostInterface
 import com.ghost.app.ui.theme.GhostTheme
@@ -202,6 +199,7 @@ private val GunmetalBg = Color(0xFF0A0F0A)
  * 
  * When keyboard opens, the PiP window moves up to keep the input field visible.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatScreenPiP(
     screenshot: Bitmap?,
@@ -218,25 +216,19 @@ private fun ChatScreenPiP(
         isVisible = true
     }
     
-    // Get keyboard height using WindowInsets
-    val view = LocalView.current
-    var keyboardHeight by remember { mutableIntStateOf(0) }
+    // Get keyboard insets using Compose WindowInsets API
+    val imeInsets = WindowInsets.ime
+    val density = LocalDensity.current
+    val keyboardHeight = imeInsets.getBottom(density)
+    val keyboardHeightDp = with(density) { keyboardHeight.toDp() }
     
-    // Listen for keyboard visibility changes
-    DisposableEffect(view) {
-        val listener = ViewCompat.OnApplyWindowInsetsListener { _, insets ->
-            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            keyboardHeight = imeInsets.bottom
-            insets
-        }
-        ViewCompat.setOnApplyWindowInsetsListener(view, listener)
-        onDispose {
-            ViewCompat.setOnApplyWindowInsetsListener(view, null)
-        }
+    // Calculate offset - move up when keyboard opens, but not more than available space
+    val maxOffset = 300.dp
+    val offsetY = if (keyboardHeightDp > 0.dp) {
+        -minOf(keyboardHeightDp, maxOffset)
+    } else {
+        0.dp
     }
-    
-    // Convert keyboard height to dp
-    val keyboardHeightDp = with(LocalDensity.current) { keyboardHeight.toDp() }
     
     // Full screen transparent container
     Box(
@@ -266,8 +258,8 @@ private fun ChatScreenPiP(
                 modifier = Modifier
                     .width(340.dp)
                     .height(600.dp)
-                    // Move PiP up when keyboard opens, max up to top margin
-                    .offset(y = -minOf(keyboardHeightDp, 300.dp))
+                    // Move PiP up when keyboard opens
+                    .offset(y = offsetY)
                     .clip(RoundedCornerShape(6.dp))
                     .background(GunmetalBg.copy(alpha = 0.95f))
                     // Phosphor border glow effect
@@ -285,9 +277,7 @@ private fun ChatScreenPiP(
                     isEngineReady = isEngineReady,
                     onSendQuery = onSendQuery,
                     onClose = onClose,
-                    onDebugClick = { },
-                    // Add imePadding to ensure input stays above keyboard
-                    modifier = Modifier.imePadding()
+                    onDebugClick = { }
                 )
             }
         }
