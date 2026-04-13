@@ -24,10 +24,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.ui.GhostInterface
+import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
 import com.ghost.app.utils.DebugLogger
 import com.ghost.app.utils.MemoryManager
@@ -45,7 +47,7 @@ import kotlinx.coroutines.launch
  * - Activity has transparent background (shows apps behind)
  * - PiP UI rendered via Compose setContent (standard Activity approach)
  * - Slide-in animation using Compose animation APIs
- * - Keyboard handling: PiP moves up when keyboard opens to keep input visible
+ * - Keyboard handling: PiP height squishes to keep Iris and input visible (no offset)
  */
 class ChatActivity : ComponentActivity() {
 
@@ -195,9 +197,10 @@ private val PhosphorGreen = Color(0xFF39FF14)
 private val GunmetalBg = Color(0xFF0A0F0A)
 
 /**
- * PiP-style Chat Screen - Transparent background with keyboard-aware positioning
+ * PiP-style Chat Screen - Transparent background with keyboard-aware height constraint
  * 
- * When keyboard opens, the PiP window moves up to keep the input field visible.
+ * When keyboard opens, the PiP window stays anchored and squishes vertically.
+ * Iris (header) and input field stay visible; response area shrinks via weight(1f).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -209,75 +212,70 @@ private fun ChatScreenPiP(
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
-    // Animation state for slide-in from right
     var isVisible by remember { mutableStateOf(false) }
-    
-    LaunchedEffect(Unit) {
-        isVisible = true
-    }
-    
-    // Get keyboard insets using Compose WindowInsets API
+    LaunchedEffect(Unit) { isVisible = true }
+
+    // Keyboard insets
     val imeInsets = WindowInsets.ime
     val density = LocalDensity.current
     val keyboardHeight = imeInsets.getBottom(density)
     val keyboardHeightDp = with(density) { keyboardHeight.toDp() }
     
-    // Calculate offset - move up when keyboard opens, but not more than available space
-    val maxOffset = 300.dp
-    val offsetY = if (keyboardHeightDp > 0.dp) {
-        -minOf(keyboardHeightDp, maxOffset)
-    } else {
-        0.dp
-    }
+    // Screen dimensions for height calculation
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val topMargin = 88.dp
+    val bottomMargin = 24.dp
+    val safetyPadding = 16.dp
     
-    // Full screen transparent container
+    // Calculate max available height: screen minus keyboard minus margins
+    val availableHeight = if (keyboardHeightDp > 0.dp) {
+        screenHeight - keyboardHeightDp - topMargin - bottomMargin - safetyPadding
+    } else {
+        600.dp // Default height when keyboard closed
+    }.coerceAtLeast(240.dp) // Minimum height to keep Iris visible
+
+    // Detect if keyboard is open for GhostInterface
+    val isKeyboardOpen = keyboardHeightDp > 0.dp
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Transparent)
-            .padding(end = 24.dp, top = 88.dp, bottom = 24.dp),
+            .padding(end = 24.dp, top = topMargin, bottom = bottomMargin),
         contentAlignment = Alignment.TopEnd
     ) {
-        // Animated PiP window - moves up when keyboard opens
         AnimatedVisibility(
             visible = isVisible,
             enter = slideInHorizontally(
-                initialOffsetX = { it }, // Start from right edge
-                animationSpec = spring(
-                    stiffness = 300f,
-                    dampingRatio = 0.8f
-                )
+                initialOffsetX = { it },
+                animationSpec = spring(stiffness = 300f, dampingRatio = 0.8f)
             ),
             exit = slideOutHorizontally(
-                targetOffsetX = { it }, // Exit to right
+                targetOffsetX = { it },
                 animationSpec = tween(durationMillis = 300)
             )
         ) {
-            // PiP Window Container - offset by keyboard height to stay above it
+            // CRITICAL: Use heightIn instead of offset to enable squishing
             Box(
                 modifier = Modifier
                     .width(340.dp)
-                    .height(600.dp)
-                    // Move PiP up when keyboard opens
-                    .offset(y = offsetY)
+                    .heightIn(max = availableHeight)
                     .clip(RoundedCornerShape(6.dp))
                     .background(GunmetalBg.copy(alpha = 0.95f))
-                    // Phosphor border glow effect
                     .border(
                         width = 2.dp,
                         color = PhosphorGreen.copy(alpha = 0.6f),
                         shape = RoundedCornerShape(6.dp)
                     )
             ) {
-                // Ghost Interface Content
                 GhostInterface(
                     capturedBitmap = screenshot,
                     responseText = responseText,
                     isGenerating = isGenerating,
                     isEngineReady = isEngineReady,
+                    isKeyboardOpen = isKeyboardOpen,
                     onSendQuery = onSendQuery,
-                    onClose = onClose,
-                    onDebugClick = { }
+                    onClose = onClose
                 )
             }
         }

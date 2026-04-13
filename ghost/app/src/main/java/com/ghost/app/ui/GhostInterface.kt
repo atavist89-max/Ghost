@@ -1,7 +1,6 @@
 package com.ghost.app.ui
 
 import android.graphics.Bitmap
-import android.view.inputmethod.BaseInputConnection
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -60,7 +58,7 @@ private val BorderPhosphor = Color(0xFF39FF14)
  * - Phosphor green text on gunmetal background
  * - CRT scanline overlay effect
  * - Spring physics slide-in from right
- * - Expandable screenshot thumbnail
+ * - Expandable screenshot thumbnail (auto-collapses when keyboard opens)
  * - Xanti Typewriter font for AI responses
  */
 @Composable
@@ -69,6 +67,7 @@ fun GhostInterface(
     responseText: String,
     isGenerating: Boolean,
     isEngineReady: Boolean = false,
+    isKeyboardOpen: Boolean = false,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
@@ -77,6 +76,13 @@ fun GhostInterface(
     var query by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    
+    // Auto-collapse thumbnail when keyboard opens to give more room
+    LaunchedEffect(isKeyboardOpen) {
+        if (isKeyboardOpen && isExpanded) {
+            isExpanded = false
+        }
+    }
     
     // Iris state management
     var irisState by remember { mutableStateOf(IrisView.State.IDLE) }
