@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghost.app.BuildConfig
 import com.ghost.app.ui.theme.GhostColors
+import com.ghost.app.ui.theme.XantiTypewriter
 
 // Phosphor Green Cyberpunk Colors
 private val PhosphorGreen = Color(0xFF39FF14)
@@ -56,7 +57,7 @@ private val BorderPhosphor = Color(0xFF39FF14)
  * - CRT scanline overlay effect
  * - Spring physics slide-in from right
  * - Expandable screenshot thumbnail
- * - Monospace typography throughout
+ * - Xanti Typewriter font for AI responses
  */
 @Composable
 fun GhostInterface(
@@ -66,7 +67,8 @@ fun GhostInterface(
     isEngineReady: Boolean = false,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
-    onDebugClick: () -> Unit = {}
+    onDebugClick: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     var query by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
@@ -90,7 +92,7 @@ fun GhostInterface(
     )
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(4.dp)
     ) {
@@ -137,7 +139,7 @@ fun GhostInterface(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Response area with scrollable text
+            // Response area with scrollable text (takes available space)
             GhostResponseArea(
                 responseText = responseText,
                 isGenerating = isGenerating,
@@ -148,7 +150,7 @@ fun GhostInterface(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Input area at bottom
+            // Input area at bottom - stays visible above keyboard
             GhostInputArea(
                 query = query,
                 onQueryChange = { query = it },
@@ -336,13 +338,13 @@ private fun GhostResponseArea(
                 )
             }
         } else if (responseText.isEmpty() && !isGenerating) {
-            // Empty state placeholder
+            // Empty state placeholder - uses Xanti Typewriter font
             Text(
                 text = "> AWAITING INPUT...",
                 color = TextPhosphorDim.copy(alpha = 0.4f),
-                fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 0.5.sp,
+                fontSize = 14.sp,
+                fontFamily = XantiTypewriter,  // Xanti Typewriter font
+                letterSpacing = 0.15.sp,
                 modifier = Modifier.align(Alignment.TopStart)
             )
         } else {
@@ -351,25 +353,25 @@ private fun GhostResponseArea(
                     .fillMaxSize()
                     .verticalScroll(scrollState)
             ) {
-                // Response text with terminal aesthetic
+                // Response text with Xanti Typewriter font
                 Text(
                     text = responseText,
                     color = TextPhosphor,
-                    fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 18.sp,
-                    letterSpacing = 0.25.sp,
+                    fontSize = 14.sp,
+                    fontFamily = XantiTypewriter,  // Xanti Typewriter font for AI responses
+                    lineHeight = 20.sp,
+                    letterSpacing = 0.15.sp,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Blinking cursor when generating
+                // Blinking cursor when generating - uses Xanti Typewriter font
                 if (isGenerating) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "█",
                         color = PhosphorGreen.copy(alpha = 0.8f),
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Monospace
+                        fontSize = 14.sp,
+                        fontFamily = XantiTypewriter  // Xanti Typewriter font
                     )
                 }
             }

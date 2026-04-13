@@ -24,7 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.ui.GhostInterface
 import com.ghost.app.ui.theme.GhostTheme
@@ -35,7 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Chat Activity - Transparent PiP-style overlay.
+ * Chat Activity - Transparent PiP-style overlay with keyboard handling.
  * 
  * CRITICAL: This uses setContent with transparent theme (not WindowManager.addView).
  * WindowManager approach requires SYSTEM_ALERT_WINDOW permission which the app doesn't have.
@@ -44,7 +48,7 @@ import kotlinx.coroutines.launch
  * - Activity has transparent background (shows apps behind)
  * - PiP UI rendered via Compose setContent (standard Activity approach)
  * - Slide-in animation using Compose animation APIs
- * - Touch outside PiP area closes the activity
+ * - Keyboard handling: PiP moves up when keyboard opens to keep input visible
  */
 class ChatActivity : ComponentActivity() {
 
@@ -90,7 +94,7 @@ class ChatActivity : ComponentActivity() {
         // Initialize inference engine
         initializeEngine()
         
-        // Set up Compose UI with transparent background
+        // Set up Compose UI with transparent background and keyboard handling
         setContent {
             GhostTheme {
                 ChatScreenPiP(
@@ -194,7 +198,9 @@ private val PhosphorGreen = Color(0xFF39FF14)
 private val GunmetalBg = Color(0xFF0A0F0A)
 
 /**
- * PiP-style Chat Screen - Transparent background with right-aligned PiP window
+ * PiP-style Chat Screen - Transparent background with keyboard-aware positioning
+ * 
+ * When keyboard opens, the PiP window moves up to keep the input field visible.
  */
 @Composable
 private fun ChatScreenPiP(
@@ -212,6 +218,26 @@ private fun ChatScreenPiP(
         isVisible = true
     }
     
+    // Get keyboard height using WindowInsets
+    val view = LocalView.current
+    var keyboardHeight by remember { mutableIntStateOf(0) }
+    
+    // Listen for keyboard visibility changes
+    DisposableEffect(view) {
+        val listener = ViewCompat.OnApplyWindowInsetsListener { _, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            keyboardHeight = imeInsets.bottom
+            insets
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(view, listener)
+        onDispose {
+            ViewCompat.setOnApplyWindowInsetsListener(view, null)
+        }
+    }
+    
+    // Convert keyboard height to dp
+    val keyboardHeightDp = with(LocalDensity.current) { keyboardHeight.toDp() }
+    
     // Full screen transparent container
     Box(
         modifier = Modifier
@@ -220,7 +246,7 @@ private fun ChatScreenPiP(
             .padding(end = 24.dp, top = 88.dp, bottom = 24.dp),
         contentAlignment = Alignment.TopEnd
     ) {
-        // Animated PiP window
+        // Animated PiP window - moves up when keyboard opens
         AnimatedVisibility(
             visible = isVisible,
             enter = slideInHorizontally(
@@ -235,11 +261,13 @@ private fun ChatScreenPiP(
                 animationSpec = tween(durationMillis = 300)
             )
         ) {
-            // PiP Window Container
+            // PiP Window Container - offset by keyboard height to stay above it
             Box(
                 modifier = Modifier
                     .width(340.dp)
                     .height(600.dp)
+                    // Move PiP up when keyboard opens, max up to top margin
+                    .offset(y = -minOf(keyboardHeightDp, 300.dp))
                     .clip(RoundedCornerShape(6.dp))
                     .background(GunmetalBg.copy(alpha = 0.95f))
                     // Phosphor border glow effect
@@ -257,7 +285,9 @@ private fun ChatScreenPiP(
                     isEngineReady = isEngineReady,
                     onSendQuery = onSendQuery,
                     onClose = onClose,
-                    onDebugClick = { }
+                    onDebugClick = { },
+                    // Add imePadding to ensure input stays above keyboard
+                    modifier = Modifier.imePadding()
                 )
             }
         }

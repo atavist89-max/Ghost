@@ -2,9 +2,16 @@ package com.ghost.app.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.ghost.app.R
+
+// Xanti Typewriter Font Family (similar typewriter aesthetic)
+val XantiTypewriter = FontFamily(
+    Font(R.font.xanti_typewriter_regular, FontWeight.Normal)
+)
 
 // Cyberpunk terminal typography - Monospace for industrial aesthetic
 val GhostTypography = Typography(
@@ -133,4 +140,14 @@ val GhostTypography = Typography(
         letterSpacing = 0.5.sp,
         color = GhostColors.phosphorDim
     )
+)
+
+// Typewriter font style for AI responses
+val TypewriterResponseStyle = TextStyle(
+    fontFamily = XantiTypewriter,
+    fontWeight = FontWeight.Normal,
+    fontSize = 14.sp,
+    lineHeight = 20.sp,
+    letterSpacing = 0.15.sp,
+    color = GhostColors.textPhosphor
 )
