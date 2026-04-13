@@ -121,6 +121,102 @@ The UI, animations, Iris mascot behaviors, PiP mechanics, AccessibilityService, 
 
 ---
 
+## Implementation Instructions (When API is Released)
+
+When `litertlm:0.11.0` (or latest available) is released on Maven, follow these steps:
+
+### 1. Update `build.gradle.kts`
+
+```kotlin
+// BEFORE:
+implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
+
+// AFTER (check Maven for latest version):
+implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
+```
+
+### 2. Update `InferenceEngine.kt`
+
+**Import changes:**
+```kotlin
+// BEFORE:
+import com.google.ai.edge.litert.*
+
+// AFTER:
+import com.google.ai.edge.litertlm.*
+```
+
+**Class changes:**
+```kotlin
+// BEFORE:
+private var llmInference: LlmInference? = null
+
+// AFTER:
+private var engine: Engine? = null
+private var conversation: Conversation? = null
+```
+
+**Initialization changes:**
+```kotlin
+// BEFORE:
+val options = LlmInference.Options.builder()
+    .setModelPath(modelPath)
+    .setPreferredBackend(LlmInference.Backend.CPU) // or GPU, NPU
+    .build()
+llmInference = LlmInference.create(context, options)
+
+// AFTER:
+engine = Engine.create(context)
+conversation = engine?.newConversation(modelPath)
+```
+
+**Inference changes:**
+```kotlin
+// BEFORE (text-only):
+llmInference?.generateAsync(prompt)
+
+// AFTER (multimodal with image):
+val tempFile = saveBitmapToTempFile(bitmap)
+val contents = Contents.of(
+    Content.ImageFile(tempFile),
+    Content.Text(query)
+)
+conversation?.sendMessage(contents)
+```
+
+### 3. Add Bitmap-to-File Helper
+
+```kotlin
+private fun saveBitmapToTempFile(bitmap: Bitmap): File {
+    val tempFile = File.createTempFile("screenshot", ".jpg", context.cacheDir)
+    FileOutputStream(tempFile).use { out ->
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+    }
+    return tempFile
+}
+```
+
+### 4. Add Cleanup
+
+Delete temp file after inference:
+```kotlin
+.onComplete { 
+    tempFile.delete()
+}
+.onError { 
+    tempFile.delete()
+}
+```
+
+### 5. Keep Unchanged
+
+- All UI code (`GhostInterface.kt`, `IrisView.kt`, `ChatActivity.kt`)
+- PiP logic (`GhostWindowManager.kt`)
+- AccessibilityService (`GhostAccessibilityService.kt`)
+- Model path handling (`GhostPaths.kt`)
+
+---
+
 ## License
 
 Private use only. Not for redistribution.
