@@ -224,8 +224,11 @@ class InferenceEngine(private val context: Context) {
                     DebugLogger.i(TAG, "Creating text message (vision API not available in v0.10.0)")
                     DebugLogger.i(TAG, "Image was saved to: $imagePath but cannot be passed to model in this version")
                     
-                    // Text-only message
-                    val userMessageObj = Message.of("I have a screenshot of my screen. $query")
+                    // Persona prompt for Star Trek computer-style responses
+                    val personaPrompt = "You are a robotic visual analysis assistant modeled after the Star Trek computer interface. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Analyze the screenshot and report only relevant findings with machine-like precision and efficiency."
+                    
+                    // Text-only message with persona
+                    val userMessageObj = Message.of("$personaPrompt I have a screenshot of my screen. $query")
                     
                     val sendingMsg = "Message object created, sending to model..."
                     Log.d(TAG, sendingMsg)
@@ -295,9 +298,15 @@ class InferenceEngine(private val context: Context) {
         // Try multiple image token formats that vision models might recognize
         // Order: most likely to least likely
         
-        // Option 1: Gemma3/4 format with <image_soft_token>
+        // Persona prompt for Star Trek computer-style responses
+        val personaPrompt = "You are a robotic visual analysis assistant modeled after the Star Trek computer interface. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Analyze the screenshot and report only relevant findings with machine-like precision and efficiency."
+        
+        // Option 1: Gemma3/4 format with <image_soft_token> and system persona
         // This is the official token from the Gemma3 template
-        return """<start_of_turn>user
+        return """<start_of_turn>system
+$personaPrompt
+<end_of_turn>
+<start_of_turn>user
 <image_soft_token>
 $query
 <end_of_turn>
