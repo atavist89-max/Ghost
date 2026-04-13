@@ -10,7 +10,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 
 - 🔒 **Zero Network Access**: No `INTERNET` permission; all inference is local
 - ⚡ **Hardware Accelerated**: Uses Hexagon NPU with GPU fallback
-- 🔊 **HAL 9000 Voice Synthesis**: Piper TTS integration with morphing Play/HAL button and staccato pulse animation
+- 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
 - 🖼️ **Single Frame Capture**: Captures screen state exactly once (no video stream)
 - 🔋 **Zero Background Drain**: No services, no notifications when closed
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
@@ -112,7 +112,7 @@ ghost/
 │   │   └── BitmapConverter.kt
 │   ├── inference/
 │   │   ├── InferenceEngine.kt
-│   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis
+│   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
 │   │   ├── ModelValidator.kt
 │   │   └── ThermalMonitor.kt
 │   ├── ui/
@@ -123,6 +123,8 @@ ghost/
 │       ├── GhostPaths.kt
 │       ├── MemoryManager.kt
 │       └── PermissionChecker.kt
+├── scripts/
+│   └── convert_hal_model.py      # Desktop Piper → Sherpa-ONNX converter
 └── ...
 ```
 
@@ -155,6 +157,11 @@ ghost/
 ### "Model not found" error
 Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Downloads/GhostModels/`
 
+### HAL 9000 voice not playing
+1. Ensure you ran `python3 scripts/convert_hal_model.py` on your desktop
+2. Ensure `tokens.txt` and `espeak-ng-data/` are in the same folder as `hal9000-denoised.onnx`
+3. Check logcat for `PiperTTS` initialization errors
+
 ### Permission denied
 Grant both "All files access" and "Display over other apps" in system settings
 
@@ -178,10 +185,11 @@ Private use only. Not for redistribution.
 ## Version History
 
 ### v1.1 (2026-04-13)
-- Added Piper TTS placeholder (`PiperTTS.kt`) for HAL 9000 voice synthesis
+- Added Sherpa-ONNX Piper TTS integration (`PiperTTS.kt`) for HAL 9000 voice synthesis
 - Replaced holotape thumbnail with morphing Play/HAL button in terminal header
 - HAL 9000 red-eye pulse animation with staccato rhythm (short-short-long)
-- Auto-parses `hal9000-denoised.json` config for sample rate and speaker ID
+- Auto-parses `hal9000-denoised.json` config and generates `tokens.txt` on-device
+- Added desktop conversion script (`scripts/convert_hal_model.py`) for ONNX metadata patching
 - TTS lifecycle integrated into `ChatActivity`
 
 ### v1.0 (2024-XX-XX)

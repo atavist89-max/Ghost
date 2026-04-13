@@ -92,6 +92,9 @@ dependencies {
     // Dynamic Animation for Iris spring physics
     implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")
 
+    // Sherpa-ONNX for Piper TTS inference
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.12.38")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

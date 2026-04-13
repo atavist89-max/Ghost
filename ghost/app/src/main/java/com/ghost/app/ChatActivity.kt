@@ -187,7 +187,7 @@ class ChatActivity : ComponentActivity() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
 
-        piperTTS?.stop()
+        piperTTS?.release()
         piperTTS = null
 
         inferenceEngine?.close()
