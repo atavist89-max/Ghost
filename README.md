@@ -273,13 +273,18 @@ If you don't have a PC, use **Google Colab** in your phone's web browser. It com
 2. Tap **"New notebook"**
 3. Run these two cells:
 
-**Cell 1 — Upload files:**
+**Cell 1 — Install dependency:**
+```python
+!pip install onnx==1.17.0
+```
+
+**Cell 2 — Upload files:**
 ```python
 from google.colab import files
 uploaded = files.upload()  # Upload hal.onnx and hal.onnx.json
 ```
 
-**Cell 2 — Convert:**
+**Cell 3 — Convert:**
 ```python
 import json, os
 from typing import Any, Dict
