@@ -10,6 +10,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 
 - 🔒 **Zero Network Access**: No `INTERNET` permission; all inference is local
 - ⚡ **Hardware Accelerated**: Uses Hexagon NPU with GPU fallback
+- 🔊 **HAL 9000 Voice Synthesis**: Piper TTS integration with morphing Play/HAL button and staccato pulse animation
 - 🖼️ **Single Frame Capture**: Captures screen state exactly once (no video stream)
 - 🔋 **Zero Background Drain**: No services, no notifications when closed
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
@@ -111,6 +112,7 @@ ghost/
 │   │   └── BitmapConverter.kt
 │   ├── inference/
 │   │   ├── InferenceEngine.kt
+│   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis
 │   │   ├── ModelValidator.kt
 │   │   └── ThermalMonitor.kt
 │   ├── ui/
@@ -175,6 +177,13 @@ Private use only. Not for redistribution.
 
 ## Version History
 
+### v1.1 (2026-04-13)
+- Added Piper TTS placeholder (`PiperTTS.kt`) for HAL 9000 voice synthesis
+- Replaced holotape thumbnail with morphing Play/HAL button in terminal header
+- HAL 9000 red-eye pulse animation with staccato rhythm (short-short-long)
+- Auto-parses `hal9000-denoised.json` config for sample rate and speaker ID
+- TTS lifecycle integrated into `ChatActivity`
+
 ### v1.0 (2024-XX-XX)
 - Initial release
 - MediaProjection screen capture
@@ -182,4 +191,4 @@ Private use only. Not for redistribution.
 - Hexagon NPU support with GPU fallback
 - Floating PiP Compose UI
 - Thermal monitoring
-# Build Sat Apr 11 21:22:52 UTC 2026
+# Build Sat Apr 13 17:22:52 UTC 2026

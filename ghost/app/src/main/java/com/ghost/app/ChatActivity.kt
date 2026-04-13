@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
+import com.ghost.app.inference.PiperTTS
 import com.ghost.app.ui.GhostInterface
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
@@ -39,10 +40,10 @@ import kotlinx.coroutines.launch
 
 /**
  * Chat Activity - Transparent PiP-style overlay with keyboard handling.
- * 
+ *
  * CRITICAL: This uses setContent with transparent theme (not WindowManager.addView).
  * WindowManager approach requires SYSTEM_ALERT_WINDOW permission which the app doesn't have.
- * 
+ *
  * Architecture:
  * - Activity has transparent background (shows apps behind)
  * - PiP UI rendered via Compose setContent (standard Activity approach)
@@ -54,7 +55,7 @@ class ChatActivity : ComponentActivity() {
     companion object {
         private const val TAG = "ChatActivity"
         const val EXTRA_SCREENSHOT_BYTES = "screenshot_bytes"
-        
+
         fun createIntent(activity: Activity, bitmap: Bitmap): Intent {
             val intent = Intent(activity, ChatActivity::class.java)
             val stream = java.io.ByteArrayOutputStream()
@@ -65,8 +66,9 @@ class ChatActivity : ComponentActivity() {
     }
 
     private var inferenceEngine: InferenceEngine? = null
+    private var piperTTS: PiperTTS? = null
     private val mainScope = CoroutineScope(Dispatchers.Main)
-    
+
     private var capturedBitmap: Bitmap? = null
     private val _responseText = mutableStateOf("")
     private val _isGenerating = mutableStateOf(false)
@@ -75,10 +77,10 @@ class ChatActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate - PiP Activity mode")
-        
+
         // Enable edge-to-edge for transparent activity
         enableEdgeToEdge()
-        
+
         // Get screenshot from intent
         val bytes = intent.getByteArrayExtra(EXTRA_SCREENSHOT_BYTES)
         if (bytes != null) {
@@ -89,10 +91,16 @@ class ChatActivity : ComponentActivity() {
         } else {
             DebugLogger.e(TAG, "No screenshot bytes in intent!")
         }
-        
+
         // Initialize inference engine
         initializeEngine()
-        
+
+        // Initialize TTS (HAL model already in models folder with Gemma)
+        piperTTS = PiperTTS(this).apply {
+            val initialized = initialize()
+            Log.i(TAG, "Piper TTS initialized: $initialized, sampleRate=${getSampleRate()}")
+        }
+
         // Set up Compose UI with transparent background and keyboard handling
         setContent {
             GhostTheme {
@@ -101,13 +109,14 @@ class ChatActivity : ComponentActivity() {
                     responseText = _responseText.value,
                     isGenerating = _isGenerating.value,
                     isEngineReady = _isEngineReady.value,
+                    tts = piperTTS,
                     onSendQuery = { query -> handleQuery(query) },
                     onClose = { finishAndRemoveTask() }
                 )
             }
         }
     }
-    
+
     private fun initializeEngine() {
         inferenceEngine = InferenceEngine(this).apply {
             initialize { success, error ->
@@ -123,17 +132,17 @@ class ChatActivity : ComponentActivity() {
             }
         }
     }
-    
+
     private fun handleQuery(query: String) {
         Log.i(TAG, "User query: $query")
         DebugLogger.i(TAG, "User query: $query")
-        
+
         if (capturedBitmap == null) {
             _responseText.value = "Error: No screenshot available"
             DebugLogger.e(TAG, "No screenshot available!")
             return
         }
-        
+
         val bitmap = capturedBitmap!!
         if (bitmap.isRecycled) {
             Log.e(TAG, "Bitmap is recycled!")
@@ -141,15 +150,15 @@ class ChatActivity : ComponentActivity() {
             _responseText.value = "Error: Screenshot was recycled"
             return
         }
-        
+
         val bitmapInfo = "Bitmap: ${bitmap.width}x${bitmap.height}, config=${bitmap.config}, " +
                 "byteCount=${bitmap.byteCount / 1024}KB"
         Log.i(TAG, "Sending bitmap to inference: $bitmapInfo")
         DebugLogger.i(TAG, bitmapInfo)
-        
+
         _responseText.value = ""
         _isGenerating.value = true
-        
+
         inferenceEngine?.analyzeImage(
             bitmap = bitmap,
             query = query,
@@ -173,20 +182,23 @@ class ChatActivity : ComponentActivity() {
             }
         )
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
-        
+
+        piperTTS?.stop()
+        piperTTS = null
+
         inferenceEngine?.close()
         inferenceEngine = null
-        
+
         capturedBitmap?.recycle()
         capturedBitmap = null
-        
+
         MemoryManager.releaseAll()
     }
-    
+
     override fun onBackPressed() {
         finishAndRemoveTask()
     }
@@ -198,7 +210,7 @@ private val GunmetalBg = Color(0xFF0A0F0A)
 
 /**
  * PiP-style Chat Screen - Transparent background with keyboard-aware height constraint
- * 
+ *
  * When keyboard opens, the PiP window stays anchored and squishes vertically.
  * Iris (header) and input field stay visible; response area shrinks via weight(1f).
  */
@@ -209,6 +221,7 @@ private fun ChatScreenPiP(
     responseText: String,
     isGenerating: Boolean,
     isEngineReady: Boolean,
+    tts: PiperTTS?,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -220,13 +233,13 @@ private fun ChatScreenPiP(
     val density = LocalDensity.current
     val keyboardHeight = imeInsets.getBottom(density)
     val keyboardHeightDp = with(density) { keyboardHeight.toDp() }
-    
+
     // Screen dimensions for height calculation
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val topMargin = 120.dp  // Increased for Pip-Boy wrist position
     val bottomMargin = 16.dp  // Tighter for compact display
     val safetyPadding = 8.dp
-    
+
     // Calculate max available height: screen minus keyboard minus margins
     // Pip-Boy compact terminal: 380dp max
     val availableHeight = if (keyboardHeightDp > 0.dp) {
@@ -275,6 +288,7 @@ private fun ChatScreenPiP(
                     isGenerating = isGenerating,
                     isEngineReady = isEngineReady,
                     isKeyboardOpen = isKeyboardOpen,
+                    tts = tts,
                     onSendQuery = onSendQuery,
                     onClose = onClose
                 )

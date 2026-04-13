@@ -13,6 +13,7 @@ Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy
 
 - **Iris Mechanical Mascot**: Bracket-shaped mechanical eyes with cursor-tracking pupils, mechanical servo LED-bar eyebrows, and 7 expressive states (IDLE, LISTENING, FOCUSED, THINKING, ANALYZING, SUCCESS, CONFUSED)
 - **Pip-Boy Terminal Interface**: Compact 260dp×380dp wrist-mounted industrial terminal with heavy CRT scanlines, VT323 font, metallic bolts, and phosphor green glow
+- **HAL 9000 Voice Synthesis**: Piper TTS integration with a morphing Play/HAL button that pulses in HAL's iconic staccato rhythm (short-short-long)
 - **Zero Network Access**: All processing happens locally on your device's NPU
 - **Zero Data Retention**: Screenshots exist only in memory, never stored
 - **Zero Background Drain**: No services running when closed—trigger only when needed
@@ -74,7 +75,7 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 | **Font** | VT323 terminal font, 24sp for body text |
 | **CRT Effects** | 40% opacity scanlines, vignette darkening, phosphor bloom |
 | **Header** | 40×24dp Iris with servo eyebrows + tabs `[VISUAL] [DATA] [STAT]` |
-| **Data Tape** | Holotape thumbnail with notched corners and monochrome green tint |
+| **Play/HAL Button** | Morphing terminal play button (⏵) ↔ pulsing red HAL 9000 eye |
 | **Terminal** | Line-numbered response area (01, 02, 03...) + flat `>` command line |
 | **Cursor** | Blinking block `█` cursor |
 
@@ -94,7 +95,8 @@ ghost/
 │   │   ├── GhostWindowManager.kt # Window management
 │   │   └── theme/                # Terminal colors & VT323 typography
 │   └── inference/
-│       └── InferenceEngine.kt    # LiteRT-LM integration (pending API)
+│       ├── InferenceEngine.kt    # LiteRT-LM integration (pending API)
+│       └── PiperTTS.kt           # HAL 9000 voice synthesis (ONNX placeholder)
 ├── app/src/main/res/font/
 │   ├── vt323_regular.ttf         # VT323 terminal font
 │   └── xanti_typewriter_regular.ttf  # Legacy typewriter font
@@ -129,6 +131,7 @@ This build demonstrates the complete visual and interaction design but uses plac
 - [ ] **Bitmap handling** — Save screenshot to temp file for vision model input
 - [ ] **Gemma 4 E2B vision model** — Multimodal understanding of screenshots
 - [ ] **Hexagon NPU acceleration** — Hardware-accelerated inference
+- [ ] **ONNX Runtime Mobile** — Piper TTS inference for HAL 9000 voice
 
 ### Production Ready
 The UI, animations, Iris mascot behaviors, Pip-Boy terminal mechanics, PiP window handling, AccessibilityService, and model path handling are complete and will remain unchanged.
@@ -228,6 +231,7 @@ Delete temp file after inference:
 - PiP logic (`GhostWindowManager.kt`)
 - AccessibilityService (`GhostAccessibilityService.kt`)
 - Model path handling (`GhostPaths.kt`)
+- Piper TTS placeholder (`PiperTTS.kt`) — UI and config parsing ready, waiting for ONNX Runtime Mobile AAR
 
 ---
 

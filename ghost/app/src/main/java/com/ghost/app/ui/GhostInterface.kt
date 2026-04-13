@@ -1,8 +1,9 @@
 package com.ghost.app.ui
 
 import android.graphics.Bitmap
+import android.util.Log
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,12 +15,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -27,16 +26,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ghost.app.BuildConfig
-import com.ghost.app.ui.theme.GhostColors
+import com.ghost.app.inference.PiperTTS
 import com.ghost.app.ui.theme.VT323
 
 // Phosphor Green Cyberpunk Colors
@@ -54,14 +50,14 @@ private val BorderPhosphor = Color(0xFF39FF14)
 
 /**
  * Ghost PiP UI Component - Pip-Boy Industrial Terminal Aesthetic
- * 
+ *
  * Features:
  * - Compact 260x380dp wrist-mounted terminal
  * - Iris mechanical eye mascot (40x24dp, sole brand identifier)
  * - Industrial housing with bolt heads and metallic border
  * - Heavy CRT scanlines (40% opacity)
  * - VT323 terminal font throughout
- * - Holotape data thumbnail with notched corners
+ * - Play/HAL button for TTS voice synthesis
  * - Terminal command line input (> prompt)
  * - Line numbers in response area
  */
@@ -72,26 +68,21 @@ fun GhostInterface(
     isGenerating: Boolean,
     isEngineReady: Boolean = false,
     isKeyboardOpen: Boolean = false,
+    tts: PiperTTS? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var query by remember { mutableStateOf("") }
-    var isExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-    
-    // Auto-collapse when keyboard opens
-    LaunchedEffect(isKeyboardOpen) {
-        if (isKeyboardOpen && isExpanded) isExpanded = false
-    }
-    
+
     // Iris state management
     var irisState by remember { mutableStateOf(IrisView.State.IDLE) }
     var cursorPosition by remember { mutableFloatStateOf(0.5f) }
     var lastTypingTime by remember { mutableLongStateOf(0L) }
     var isTyping by remember { mutableStateOf(false) }
-    
+
     // Track typing and cursor position
     LaunchedEffect(query) {
         if (query.isNotEmpty()) {
@@ -103,7 +94,7 @@ fun GhostInterface(
             isTyping = false
         }
     }
-    
+
     // Auto-transition from LISTENING to FOCUSED after pause
     LaunchedEffect(lastTypingTime) {
         if (isTyping && irisState == IrisView.State.LISTENING) {
@@ -113,7 +104,7 @@ fun GhostInterface(
             }
         }
     }
-    
+
     // Update iris state based on generation status
     LaunchedEffect(isGenerating, responseText) {
         irisState = when {
@@ -142,7 +133,7 @@ fun GhostInterface(
                 .fillMaxSize()
                 .clip(RoundedCornerShape(2.dp))  // Almost square industrial corners
                 .background(GunmetalBg.copy(alpha = 0.95f))
-                .drawBehind { 
+                .drawBehind {
                     drawInnerBevel()
                     drawCRTBloom()
                 }
@@ -153,13 +144,13 @@ fun GhostInterface(
                 }
                 .padding(6.dp)  // Reduced from 12dp
         ) {
-            // Header: Iris + Tabs + Holotape thumbnail
+            // Header: Iris + Play/HAL button + Debug + Close
             PipBoyHeader(
                 irisState = irisState,
                 cursorPosition = cursorPosition,
-                screenshot = capturedBitmap,
-                isThumbnailExpanded = isExpanded,
-                onThumbnailClick = { isExpanded = !isExpanded },
+                responseText = responseText,
+                isGenerating = isGenerating,
+                tts = tts,
                 onClose = onClose,
                 onDebugClick = onDebugClick
             )
@@ -190,7 +181,7 @@ fun GhostInterface(
             // Terminal command line input
             TerminalInputLine(
                 query = query,
-                onQueryChange = { 
+                onQueryChange = {
                     query = it
                     cursorPosition = if (it.isEmpty()) 0.5f else 0.3f + (it.length.coerceAtMost(20) / 20f) * 0.4f
                 },
@@ -214,9 +205,9 @@ fun GhostInterface(
 private fun PipBoyHeader(
     irisState: IrisView.State,
     cursorPosition: Float,
-    screenshot: Bitmap?,
-    isThumbnailExpanded: Boolean,
-    onThumbnailClick: () -> Unit,
+    responseText: String,
+    isGenerating: Boolean,
+    tts: PiperTTS?,
     onClose: () -> Unit,
     onDebugClick: () -> Unit
 ) {
@@ -243,16 +234,18 @@ private fun PipBoyHeader(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Holotape thumbnail (60x60, notched corners)
-        if (screenshot != null) {
-            HolotapeThumbnail(
-                bitmap = screenshot,
-                isExpanded = isThumbnailExpanded,
-                onClick = onThumbnailClick
-            )
-            
-            Spacer(modifier = Modifier.width(4.dp))
-        }
+        // Play/HAL button (instead of holotape DATA thumbnail)
+        PlayHALButton(
+            responseText = responseText,
+            isGenerating = isGenerating,
+            tts = tts,
+            onPlayingStateChange = { playing ->
+                // Optional: Sync Iris to LISTENING mode when HAL speaks?
+                // Or keep Iris in current state
+            }
+        )
+
+        Spacer(modifier = Modifier.width(4.dp))
 
         // Debug button (only in debug builds)
         if (BuildConfig.DEBUG) {
@@ -285,52 +278,138 @@ private fun PipBoyHeader(
 }
 
 @Composable
-private fun HolotapeThumbnail(
-    bitmap: Bitmap,
-    isExpanded: Boolean,
-    onClick: () -> Unit
+private fun PlayHALButton(
+    responseText: String,
+    isGenerating: Boolean,
+    tts: PiperTTS?,
+    onPlayingStateChange: (Boolean) -> Unit
 ) {
-    val size = if (isExpanded) 100.dp else 50.dp
-    
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+    var isPlaying by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // HAL's staccato speaking rhythm: short-short-long
+    val infiniteTransition = rememberInfiniteTransition(label = "halPulse")
+    val halAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = if (isPlaying) {
+            infiniteRepeatable(
+                animation = keyframes {
+                    durationMillis = 1200
+                    0.4f at 0      // off
+                    1.0f at 100    // short pulse
+                    0.4f at 200    // off
+                    1.0f at 300    // short pulse
+                    0.4f at 400    // off
+                    0.9f at 800    // long sustain
+                    0.4f at 1200   // off, repeat
+                },
+                repeatMode = RepeatMode.Restart
+            )
+        } else {
+            infiniteRepeatable(
+                animation = tween(2000, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            )
+        },
+        label = "halPulse"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.95f,
+        animationSpec = spring(stiffness = 400f, dampingRatio = 0.4f)
+    )
+
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .scale(scale)
+            .clickable(
+                enabled = responseText.isNotBlank() && !isGenerating && tts?.isReady() == true,
+                onClick = {
+                    if (isPlaying) {
+                        tts?.stop()
+                        isPlaying = false
+                        onPlayingStateChange(false)
+                    } else {
+                        isPlaying = true
+                        onPlayingStateChange(true)
+                        tts?.speak(
+                            text = responseText,
+                            onComplete = {
+                                isPlaying = false
+                                onPlayingStateChange(false)
+                            },
+                            onError = { error ->
+                                Log.e("PlayHAL", "TTS error: $error")
+                                isPlaying = false
+                                onPlayingStateChange(false)
+                            }
+                        )
+                    }
+                }
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        // DATA label
-        Text(
-            text = "DATA",
-            fontFamily = VT323,
-            fontSize = 16.sp,
-            color = PhosphorDim.copy(alpha = 0.7f)
-        )
-        
-        // Notched corner thumbnail
-        Box(
-            modifier = Modifier
-                .size(size)
-                .clip(HolotapeShape())
-                .background(GunmetalSurfaceVariant)
-                .border(
-                    width = 1.dp,
-                    color = BorderPhosphor.copy(alpha = 0.5f),
-                    shape = HolotapeShape()
-                )
-                .clickable(onClick = onClick)
-                .padding(2.dp)
-        ) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Data tape",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(0.8f)  // Monochrome green filter effect
-            )
-            
-            // Green overlay for holotape effect
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(PhosphorGreen.copy(alpha = 0.1f))
-            )
+        Crossfade(
+            targetState = isPlaying,
+            animationSpec = tween(300),
+            label = "playHalMorph"
+        ) { playing ->
+            if (playing) {
+                // HAL 9000 Red Eye (pulsing)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF0000).copy(alpha = halAlpha))
+                        .border(2.dp, Color(0xFF330000), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Lens highlight
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .offset(x = (-3).dp, y = (-3).dp)
+                            .background(Color.White.copy(alpha = 0.4f), CircleShape)
+                    )
+                }
+            } else {
+                // Terminal Play Button (Phosphor Green)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(GunmetalSurface)
+                        .border(
+                            1.dp,
+                            if (responseText.isNotBlank() && tts?.isReady() == true)
+                                BorderPhosphor.copy(alpha = 0.6f)
+                            else
+                                BorderPhosphor.copy(alpha = 0.2f),
+                            RoundedCornerShape(2.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "⏵",
+                        fontFamily = VT323,
+                        fontSize = 20.sp,
+                        color = if (responseText.isNotBlank() && tts?.isReady() == true)
+                            PhosphorGreen
+                        else
+                            PhosphorDim.copy(alpha = 0.3f)
+                    )
+                }
+            }
+        }
+    }
+
+    // Auto-reset when response changes
+    LaunchedEffect(responseText) {
+        if (responseText.isBlank()) {
+            isPlaying = false
+            onPlayingStateChange(false)
         }
     }
 }
@@ -374,9 +453,9 @@ private fun TerminalResponseArea(
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.width(4.dp))
-        
+
         // Content area
         Box(
             modifier = Modifier
@@ -450,7 +529,7 @@ private fun BlinkingCursor() {
         ),
         label = "cursorBlink"
     )
-    
+
     Text(
         text = "█",
         fontFamily = VT323,
@@ -489,7 +568,7 @@ private fun TerminalInputLine(
             color = PhosphorGreen,
             modifier = Modifier.padding(end = 4.dp)
         )
-        
+
         // Input field
         BasicTextField(
             value = query,
@@ -519,13 +598,13 @@ private fun TerminalInputLine(
                 .padding(vertical = 4.dp),
             singleLine = true
         )
-        
+
         // Blinking cursor when typing
         if (query.isNotEmpty() && enabled) {
             BlinkingCursor()
             Spacer(modifier = Modifier.width(4.dp))
         }
-        
+
         // Execute button
         IconButton(
             onClick = onSend,
@@ -545,7 +624,7 @@ private fun TerminalInputLine(
 @Composable
 private fun CornerBolts() {
     val boltColor = Color(0xFF6A6A6A)
-    
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Top-left bolt
         Box(
@@ -555,7 +634,7 @@ private fun CornerBolts() {
                 .background(boltColor, CircleShape)
                 .align(Alignment.TopStart)
         )
-        
+
         // Top-right bolt
         Box(
             modifier = Modifier
@@ -564,7 +643,7 @@ private fun CornerBolts() {
                 .background(boltColor, CircleShape)
                 .align(Alignment.TopEnd)
         )
-        
+
         // Bottom-left bolt
         Box(
             modifier = Modifier
@@ -573,7 +652,7 @@ private fun CornerBolts() {
                 .background(boltColor, CircleShape)
                 .align(Alignment.BottomStart)
         )
-        
+
         // Bottom-right bolt
         Box(
             modifier = Modifier
@@ -582,34 +661,6 @@ private fun CornerBolts() {
                 .background(boltColor, CircleShape)
                 .align(Alignment.BottomEnd)
         )
-    }
-}
-
-// Holotape shape with notched corners
-private class HolotapeShape : androidx.compose.ui.graphics.Shape {
-    override fun createOutline(
-        size: Size,
-        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
-        density: androidx.compose.ui.unit.Density
-    ): androidx.compose.ui.graphics.Outline {
-        val notchSize = 8f
-        val path = androidx.compose.ui.graphics.Path().apply {
-            // Start after top-left notch
-            moveTo(notchSize, 0f)
-            // Top edge to top-right
-            lineTo(size.width, 0f)
-            // Right edge
-            lineTo(size.width, size.height - notchSize)
-            // Bottom-right notch
-            lineTo(size.width - notchSize, size.height)
-            // Bottom edge to bottom-left
-            lineTo(0f, size.height)
-            // Left edge to top-left notch
-            lineTo(0f, notchSize)
-            // Close to start
-            close()
-        }
-        return androidx.compose.ui.graphics.Outline.Generic(path)
     }
 }
 
@@ -651,14 +702,14 @@ private fun DrawScope.drawScanlines() {
 private fun DrawScope.drawCRTBloom() {
     // Subtle phosphor glow at edges
     val strokeWidth = 2.dp.toPx()
-    
+
     // Top glow
     drawRect(
         color = BorderPhosphor.copy(alpha = 0.15f),
         topLeft = Offset(0f, 0f),
         size = Size(size.width, strokeWidth * 2)
     )
-    
+
     // Bottom glow
     drawRect(
         color = BorderPhosphor.copy(alpha = 0.1f),
