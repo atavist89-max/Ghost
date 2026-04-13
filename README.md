@@ -7,12 +7,12 @@
 
 ## What is Ghost?
 
-Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy S25+ (Android 16 / One UI 8.0). Triggered by double-tapping the Side Key, it captures your screen and provides instant AI-powered insights through a floating Picture-in-Picture window—completely offline.
+Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy S25+ (Android 16 / One UI 8.0). Triggered by double-tapping the Side Key, it captures your screen and provides instant AI-powered insights through a floating Pip-Boy-style Picture-in-Picture window—completely offline.
 
 ### Key Features
 
 - **Iris Mechanical Mascot**: Bracket-shaped mechanical eyes with cursor-tracking pupils and 7 expressive states (IDLE, LISTENING, FOCUSED, THINKING, ANALYZING, SUCCESS, CONFUSED)
-- **Cyberpunk PiP Interface**: Phosphor green CRT aesthetic with scanline effects, mechanical typography, and spring-physics animations
+- **Pip-Boy Terminal Interface**: Compact 260dp×380dp wrist-mounted industrial terminal with heavy CRT scanlines, VT323 font, metallic bolts, and phosphor green glow
 - **Zero Network Access**: All processing happens locally on your device's NPU
 - **Zero Data Retention**: Screenshots exist only in memory, never stored
 - **Zero Background Drain**: No services running when closed—trigger only when needed
@@ -39,7 +39,7 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 1. Grant **Storage** permission (for model file access)
 2. Enable **Ghost Accessibility Service** in Settings
 3. Double-tap the **Side Key** to activate
-4. Ask Ghost anything about your current screen
+4. Type `>` followed by your command in the terminal line
 
 ---
 
@@ -49,8 +49,8 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 
 1. **Double-tap Side Key** → Accessibility Service captures silent screenshot
 2. **Iris awakens** → Mechanical eyes transition from IDLE to LISTENING
-3. **Type your question** → Pupils track cursor; brackets morph to FOCUSED state
-4. **Press Send** → Iris enters THINKING/ANALYZING with scanning animations
+3. **Type your command** → Pupils track cursor; brackets morph to FOCUSED state
+4. **Press ⏎ Execute** → Iris enters THINKING/ANALYZING with scanning animations
 5. **Receive response** → SUCCESS state with satisfying checkmark pupils
 
 ### Iris Expression States
@@ -60,10 +60,23 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 | **IDLE** | Slow mechanical blink, breathing scale | App open, awaiting input |
 | **LISTENING** | Pupils track cursor X position | User typing |
 | **FOCUSED** | Vertical line pupils, sharpened brackets | Paused typing |
-| **THINKING** | Sweeping scan animation, tilted brackets | Send pressed |
+| **THINKING** | Sweeping scan animation, tilted brackets | Execute pressed |
 | **ANALYZING** | Solid bar pupils, rapid glow pulse | Inference active |
 | **SUCCESS** | Checkmark ✓ pupils, satisfied nod | Response complete |
 | **CONFUSED** | Question mark ?, rapid 3× blink | Error state |
+
+### Pip-Boy Terminal UI
+
+| Element | Description |
+|---------|-------------|
+| **Window** | 260dp × 380dp, anchored top-right (120dp from top) |
+| **Frame** | Industrial housing with 4 metallic bolt heads, 2dp square corners |
+| **Font** | VT323 terminal font, 24sp for body text |
+| **CRT Effects** | 40% opacity scanlines, vignette darkening, phosphor bloom |
+| **Header** | 40×24dp Iris + tabs `[VISUAL] [DATA] [STAT]` |
+| **Data Tape** | Holotape thumbnail with notched corners and monochrome green tint |
+| **Terminal** | Line-numbered response area (01, 02, 03...) + flat `>` command line |
+| **Cursor** | Blinking block `█` cursor |
 
 ---
 
@@ -73,17 +86,18 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 ghost/
 ├── app/src/main/java/com/ghost/app/
 │   ├── GhostActivity.kt          # Entry point & orchestration
-│   ├── ChatActivity.kt           # PiP overlay UI
+│   ├── ChatActivity.kt           # Pip-Boy overlay UI
 │   ├── GhostAccessibilityService.kt  # Silent screenshot capture
 │   ├── ui/
 │   │   ├── IrisView.kt           # Mechanical eye mascot (Canvas)
-│   │   ├── GhostInterface.kt     # Main PiP Compose UI
+│   │   ├── GhostInterface.kt     # Pip-Boy terminal Compose UI
 │   │   ├── GhostWindowManager.kt # Window management
-│   │   └── theme/                # Cyberpunk colors & typography
+│   │   └── theme/                # Terminal colors & VT323 typography
 │   └── inference/
 │       └── InferenceEngine.kt    # LiteRT-LM integration (pending API)
 ├── app/src/main/res/font/
-│   └── xanti_typewriter_regular.ttf  # Typewriter response font
+│   ├── vt323_regular.ttf         # VT323 terminal font
+│   └── xanti_typewriter_regular.ttf  # Legacy typewriter font
 └── build.gradle.kts
 ```
 
@@ -95,8 +109,8 @@ ghost/
 |------|-------|
 | **Target** | Android 16 (API 36) / One UI 8.0 |
 | **Architecture** | arm64-v8a |
-| **PiP Window** | 340dp × 600dp, right-edge anchored |
-| **Font** | Xanti Typewriter (responses), Monospace (UI) |
+| **PiP Window** | 260dp × 380dp, right-edge anchored, 120dp from top |
+| **Font** | VT323 terminal font (24sp body) |
 | **Colors** | Phosphor green `#39FF14` on gunmetal `#0A0F0A` |
 | **Animation** | Spring physics (stiffness 300, damping 0.8) |
 | **LLM** | Gemma 4 E2B via LiteRT-LM (pending API migration) |
@@ -117,7 +131,7 @@ This build demonstrates the complete visual and interaction design but uses plac
 - [ ] **Hexagon NPU acceleration** — Hardware-accelerated inference
 
 ### Production Ready
-The UI, animations, Iris mascot behaviors, PiP mechanics, AccessibilityService, and model path handling are complete and will remain unchanged.
+The UI, animations, Iris mascot behaviors, Pip-Boy terminal mechanics, PiP window handling, AccessibilityService, and model path handling are complete and will remain unchanged.
 
 ---
 
