@@ -158,19 +158,16 @@ ghost/
 Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Download/GhostModels/`
 
 ### HAL 9000 voice not playing
-1. Ensure you converted the model:
-   - **Desktop:** `python3 scripts/convert_hal_model.py /path/to/model/dir`
-   - **Termux (on-phone):**
-     ```bash
-     pkg install -y python wget tar && pip install onnx==1.17.0
-     cd /storage/emulated/0/Download/GhostModels
-     wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2
-     tar xf espeak-ng-data.tar.bz2 && rm espeak-ng-data.tar.bz2
-     wget https://raw.githubusercontent.com/atavist89-max/Ghost/main/scripts/convert_hal_model.py
-     python3 convert_hal_model.py /storage/emulated/0/Download/GhostModels
-     rm convert_hal_model.py
-     ```
-2. Ensure `tokens.txt` and `espeak-ng-data/` are in the same folder as `hal.onnx`
+1. **Ensure you converted the model.** If you don't have a desktop, use **Google Colab** in your phone browser (see `README.md` for the notebook script).
+   ```bash
+   # Desktop (reliable)
+   pip install onnx==1.17.0
+   python3 scripts/convert_hal_model.py /path/to/model/dir
+   ```
+2. Ensure these files are in the same folder as `hal.onnx`:
+   - `hal.onnx.json`
+   - `tokens.txt`
+   - `espeak-ng-data/`
 3. Check logcat for `PiperTTS` initialization errors
 
 ### Permission denied
