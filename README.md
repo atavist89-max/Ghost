@@ -1,7 +1,7 @@
 # Ghost v1.0
 
 > ⚠️ **PLACEHOLDER IMPLEMENTATION** ⚠️  
-> This is a placeholder UI implementation until the **LiteRT-LM inference API** is fully released. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual on-device LLM inference. The production API integration for Gemma 4 E2B model loading and Hexagon NPU acceleration is pending final SDK release.
+> This is a placeholder UI implementation waiting for the **LiteRT-LM API migration** from `litert-support-api:0.10.0` to `litertlm:0.11.0` for multimodal vision support. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual on-device LLM inference with image input. The production API integration is pending Maven availability of `litertlm` with vision capabilities.
 
 ---
 
@@ -99,20 +99,25 @@ ghost/
 | **Font** | Xanti Typewriter (responses), Monospace (UI) |
 | **Colors** | Phosphor green `#39FF14` on gunmetal `#0A0F0A` |
 | **Animation** | Spring physics (stiffness 300, damping 0.8) |
-| **LLM** | Gemma 4 E2B via LiteRT-LM (pending API) |
+| **LLM** | Gemma 4 E2B via LiteRT-LM (pending API migration) |
 
 ---
 
 ## Placeholder Notice
 
-This build demonstrates the complete visual and interaction design but uses placeholder responses. The production version will integrate:
+This build demonstrates the complete visual and interaction design but uses placeholder responses. The production version is waiting for:
 
-- [ ] **LiteRT-LM inference API** — On-device model loading and inference
+### Pending API Migration
+- [ ] **LiteRT-LM Maven availability** — `litertlm:0.11.0` with multimodal vision
+- [ ] **API migration** — Replace `litert-support-api:0.10.0` imports with `litertlm`
+- [ ] **Class migration** — `LlmInference` → `Engine` and `Conversation`
+- [ ] **Method migration** — `generateAsync(prompt)` → `sendMessage(Contents.of(Content.ImageFile(tempFile), Content.Text(query)))`
+- [ ] **Bitmap handling** — Save screenshot to temp file for vision model input
 - [ ] **Gemma 4 E2B vision model** — Multimodal understanding of screenshots
 - [ ] **Hexagon NPU acceleration** — Hardware-accelerated inference
-- [ ] **Streaming token generation** — Real-time response streaming
 
-The UI, animations, Iris mascot behaviors, and PiP mechanics are production-ready.
+### Production Ready
+The UI, animations, Iris mascot behaviors, PiP mechanics, AccessibilityService, and model path handling are complete and will remain unchanged.
 
 ---
 
