@@ -12,8 +12,8 @@ Requirements:
     pip install onnx==1.17.0
 
 After running, copy these files to your Android device next to the Gemma model:
-    - hal9000-denoised.onnx   (patched with metadata)
-    - hal9000-denoised.json   (unchanged)
+    - hal.onnx   (patched with metadata)
+    - hal.onnx.json   (unchanged)
     - tokens.txt              (generated)
     - espeak-ng-data/         (download link below)
 
@@ -76,13 +76,13 @@ def main():
     parser.add_argument(
         "model_dir",
         type=str,
-        help="Directory containing hal9000-denoised.onnx and hal9000-denoised.json",
+        help="Directory containing hal.onnx and hal.onnx.json",
     )
     args = parser.parse_args()
 
     model_dir = os.path.abspath(args.model_dir)
-    onnx_path = os.path.join(model_dir, "hal9000-denoised.onnx")
-    json_path = os.path.join(model_dir, "hal9000-denoised.json")
+    onnx_path = os.path.join(model_dir, "hal.onnx")
+    json_path = os.path.join(model_dir, "hal.onnx.json")
     tokens_path = os.path.join(model_dir, "tokens.txt")
     espeak_dir = os.path.join(model_dir, "espeak-ng-data")
 

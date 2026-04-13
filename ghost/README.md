@@ -170,7 +170,7 @@ Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Download/GhostModel
      python3 convert_hal_model.py /storage/emulated/0/Download/GhostModels
      rm convert_hal_model.py
      ```
-2. Ensure `tokens.txt` and `espeak-ng-data/` are in the same folder as `hal9000-denoised.onnx`
+2. Ensure `tokens.txt` and `espeak-ng-data/` are in the same folder as `hal.onnx`
 3. Check logcat for `PiperTTS` initialization errors
 
 ### Permission denied
@@ -199,7 +199,7 @@ Private use only. Not for redistribution.
 - Added Sherpa-ONNX Piper TTS integration (`PiperTTS.kt`) for HAL 9000 voice synthesis
 - Replaced holotape thumbnail with morphing Play/HAL button in terminal header
 - HAL 9000 red-eye pulse animation with staccato rhythm (short-short-long)
-- Auto-parses `hal9000-denoised.json` config and generates `tokens.txt` on-device
+- Auto-parses `hal.onnx.json` config and generates `tokens.txt` on-device
 - Added desktop conversion script (`scripts/convert_hal_model.py`) for ONNX metadata patching
 - TTS lifecycle integrated into `ChatActivity`
 

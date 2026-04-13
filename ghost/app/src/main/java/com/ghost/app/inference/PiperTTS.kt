@@ -26,8 +26,8 @@ class PiperTTS(private val context: Context) {
 
     companion object {
         private const val TAG = "PiperTTS"
-        private const val MODEL_FILENAME = "hal9000-denoised.onnx"
-        private const val CONFIG_FILENAME = "hal9000-denoised.json"
+        private const val MODEL_FILENAME = "hal.onnx"
+        private const val CONFIG_FILENAME = "hal.onnx.json"
     }
 
     private var mediaPlayer: MediaPlayer? = null
