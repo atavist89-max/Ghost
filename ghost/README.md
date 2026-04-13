@@ -27,7 +27,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 Before using Ghost, you must place the model file:
 
 ```
-Internal Storage/Downloads/GhostModels/gemma-4-e2b.litertlm
+Internal Storage/Download/GhostModels/gemma-4-e2b.litertlm
 ```
 
 The file should be approximately 2.5GB. The app will not function without it.
@@ -57,7 +57,7 @@ On first launch, the app will redirect you to system settings to grant:
 
 ### 4. Place Model File
 
-Copy `gemma-4-e2b.litertlm` to `Internal Storage/Downloads/GhostModels/`
+Copy `gemma-4-e2b.litertlm` to `Internal Storage/Download/GhostModels/`
 
 ## Usage
 
@@ -79,7 +79,7 @@ Copy `gemma-4-e2b.litertlm` to `Internal Storage/Downloads/GhostModels/`
 GhostActivity (Entry Point)
 ├── MediaProjectionManager → Capture single Bitmap (1280×720)
 ├── LiteRT-LM Inference Engine
-│   ├── Model Loader (/sdcard/Download/GhostModels/)
+│   ├── Model Loader (/storage/emulated/0/Download/GhostModels/)
 │   ├── HexagonNpuDelegate (primary) / GpuDelegate (fallback)
 │   └── AsyncTokenGenerator (streaming responses)
 ├── WindowManager Overlay (TYPE_APPLICATION_OVERLAY)
@@ -155,7 +155,7 @@ ghost/
 ## Troubleshooting
 
 ### "Model not found" error
-Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Downloads/GhostModels/`
+Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Download/GhostModels/`
 
 ### HAL 9000 voice not playing
 1. Ensure you converted the model:
@@ -163,11 +163,11 @@ Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Downloads/GhostMode
    - **Termux (on-phone):**
      ```bash
      pkg install -y python wget tar && pip install onnx==1.17.0
-     cd /sdcard/Download/GhostModels
+     cd /storage/emulated/0/Download/GhostModels
      wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2
      tar xf espeak-ng-data.tar.bz2 && rm espeak-ng-data.tar.bz2
      wget https://raw.githubusercontent.com/atavist89-max/Ghost/main/scripts/convert_hal_model.py
-     python3 convert_hal_model.py /sdcard/Download/GhostModels
+     python3 convert_hal_model.py /storage/emulated/0/Download/GhostModels
      rm convert_hal_model.py
      ```
 2. Ensure `tokens.txt` and `espeak-ng-data/` are in the same folder as `hal9000-denoised.onnx`

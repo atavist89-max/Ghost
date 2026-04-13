@@ -269,6 +269,8 @@ Before HAL can speak, the raw Piper model must be **converted**. You can do this
 
 If you already have `hal9000-denoised.onnx` and `hal9000-denoised.json` in `Internal Storage/Download/GhostModels/`, run this in Termux:
 
+> **Note:** The canonical path on modern Android is `/storage/emulated/0/Download/GhostModels`. The legacy `/sdcard/Download/GhostModels` symlink works on many devices but is not guaranteed.
+
 ```bash
 # Install dependencies
 pkg update
@@ -276,7 +278,7 @@ pkg install -y python wget tar
 pip install onnx==1.17.0
 
 # Set path to your model directory (same folder as Gemma 4 E2B)
-MODEL_DIR="/sdcard/Download/GhostModels"
+MODEL_DIR="/storage/emulated/0/Download/GhostModels"
 cd "$MODEL_DIR"
 
 # Download and extract espeak-ng-data
