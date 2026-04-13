@@ -14,7 +14,7 @@ import androidx.dynamicanimation.animation.SpringForce
 /**
  * Iris - Mechanical bracket-shaped eyes with cursor-tracking pupils.
  * 
- * Dimensions: 56dp x 32dp (two 20dp x 32dp eyes with 8dp gap)
+ * Dimensions: 40dp x 24dp (two 14dp x 20dp eyes with 6dp gap) - Pip-Boy compact
  * Features:
  * - Bracket-shaped frames [ ] with phosphor glow
  * - Cursor-tracking pupils with spring physics
@@ -44,10 +44,10 @@ class IrisView @JvmOverloads constructor(
         private const val GUNMETAL_BG = 0xFF0A0F0A.toInt()
         private const val ERROR_RED = 0xFFFF4444.toInt()
         
-        // Dimensions (dp converted to pixels in init)
-        private const val EYE_WIDTH_DP = 20f
-        private const val EYE_HEIGHT_DP = 32f
-        private const val EYE_GAP_DP = 8f
+        // Dimensions (dp converted to pixels in init) - Pip-Boy compact 40x24
+        private const val EYE_WIDTH_DP = 14f
+        private const val EYE_HEIGHT_DP = 20f
+        private const val EYE_GAP_DP = 6f
         private const val BORDER_WIDTH_DP = 2f
         private const val PUPIL_SIZE_DP = 4f
         private const val TOTAL_WIDTH_DP = 56f // 20 + 8 + 20 + 8 padding

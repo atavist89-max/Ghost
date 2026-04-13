@@ -223,16 +223,17 @@ private fun ChatScreenPiP(
     
     // Screen dimensions for height calculation
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val topMargin = 88.dp
-    val bottomMargin = 24.dp
-    val safetyPadding = 16.dp
+    val topMargin = 120.dp  // Increased for Pip-Boy wrist position
+    val bottomMargin = 16.dp  // Tighter for compact display
+    val safetyPadding = 8.dp
     
     // Calculate max available height: screen minus keyboard minus margins
+    // Pip-Boy compact terminal: 380dp max
     val availableHeight = if (keyboardHeightDp > 0.dp) {
         screenHeight - keyboardHeightDp - topMargin - bottomMargin - safetyPadding
     } else {
-        600.dp // Default height when keyboard closed
-    }.coerceAtLeast(240.dp) // Minimum height to keep Iris visible
+        380.dp // Default compact height when keyboard closed
+    }.coerceAtMost(380.dp).coerceAtLeast(180.dp) // Min to keep Iris visible
 
     // Detect if keyboard is open for GhostInterface
     val isKeyboardOpen = keyboardHeightDp > 0.dp
@@ -241,7 +242,7 @@ private fun ChatScreenPiP(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Transparent)
-            .padding(end = 24.dp, top = topMargin, bottom = bottomMargin),
+            .padding(end = 16.dp, top = topMargin, bottom = bottomMargin),
         contentAlignment = Alignment.TopEnd
     ) {
         AnimatedVisibility(
@@ -255,17 +256,17 @@ private fun ChatScreenPiP(
                 animationSpec = tween(durationMillis = 300)
             )
         ) {
-            // CRITICAL: Use heightIn instead of offset to enable squishing
+            // Pip-Boy terminal container: compact industrial housing
             Box(
                 modifier = Modifier
-                    .width(340.dp)
+                    .width(260.dp)  // Compact wrist-mounted display
                     .heightIn(max = availableHeight)
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(2.dp))  // Almost square industrial corners
                     .background(GunmetalBg.copy(alpha = 0.95f))
                     .border(
-                        width = 2.dp,
+                        width = 4.dp,
                         color = PhosphorGreen.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(2.dp)
                     )
             ) {
                 GhostInterface(
