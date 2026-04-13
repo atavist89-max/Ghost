@@ -424,20 +424,22 @@ class IrisView @JvmOverloads constructor(
 
     private fun performRapidBlink() {
         var count = 0
-        val blink = Runnable {
-            if (count < 3) {
-                blinkAnimator?.cancel()
-                blinkAnimator = ValueAnimator.ofFloat(0f, 1f, 0f).apply {
-                    duration = 150
-                    interpolator = LinearInterpolator()
-                    addUpdateListener { blinkProgress = it.animatedValue as Float }
-                    start()
+        val blinkRunnable = object : Runnable {
+            override fun run() {
+                if (count < 3) {
+                    blinkAnimator?.cancel()
+                    blinkAnimator = ValueAnimator.ofFloat(0f, 1f, 0f).apply {
+                        duration = 150
+                        interpolator = LinearInterpolator()
+                        addUpdateListener { blinkProgress = it.animatedValue as Float }
+                        start()
+                    }
+                    count++
+                    postDelayed(this, 200)
                 }
-                count++
-                postDelayed(this, 200)
             }
         }
-        post(blink)
+        post(blinkRunnable)
     }
 
     private fun startScanAnimation() {
