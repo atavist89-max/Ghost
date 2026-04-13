@@ -4,46 +4,47 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.PixelFormat
 import android.os.Bundle
 import android.util.Log
-import android.view.Gravity
-import android.view.WindowManager
-import android.os.Build
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.mutableStateOf
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.ui.GhostInterface
-import com.ghost.app.ui.GhostWindowManager
 import com.ghost.app.ui.theme.GhostTheme
 import com.ghost.app.utils.DebugLogger
 import com.ghost.app.utils.MemoryManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import androidx.compose.ui.platform.ComposeView
-import android.view.View
-import android.widget.FrameLayout
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
 /**
- * PiP Chat Activity - Shows floating overlay window instead of full-screen.
+ * Chat Activity - Transparent PiP-style overlay.
  * 
- * CRITICAL CONSTRAINT: Only modifies UI layer. The double-tap Side Key trigger,
- * AccessibilityService screenshot capture, and inference engine remain untouched.
+ * CRITICAL: This uses setContent with transparent theme (not WindowManager.addView).
+ * WindowManager approach requires SYSTEM_ALERT_WINDOW permission which the app doesn't have.
  * 
  * Architecture:
- * - Activity is transparent (no setContent with full-screen Compose)
- * - Uses GhostWindowManager to add PiP overlay via WindowManager.addView()
- * - PiP slides in from right edge with spring physics animation
- * - Cyberpunk terminal aesthetic: phosphor green, CRT glow, scanlines
+ * - Activity has transparent background (shows apps behind)
+ * - PiP UI rendered via Compose setContent (standard Activity approach)
+ * - Slide-in animation using Compose animation APIs
+ * - Touch outside PiP area closes the activity
  */
 class ChatActivity : ComponentActivity() {
 
@@ -68,18 +69,12 @@ class ChatActivity : ComponentActivity() {
     private val _isGenerating = mutableStateOf(false)
     private val _isEngineReady = mutableStateOf(false)
 
-    // WindowManager overlay components
-    private var windowManager: WindowManager? = null
-    private var windowView: View? = null
-    private var composeView: ComposeView? = null
-    private val windowParams: WindowManager.LayoutParams by lazy { createWindowParams() }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate - PiP mode")
+        Log.d(TAG, "onCreate - PiP Activity mode")
         
-        // Make activity transparent - no UI here, just the PiP overlay
-        makeActivityTransparent()
+        // Enable edge-to-edge for transparent activity
+        enableEdgeToEdge()
         
         // Get screenshot from intent
         val bytes = intent.getByteArrayExtra(EXTRA_SCREENSHOT_BYTES)
@@ -95,190 +90,19 @@ class ChatActivity : ComponentActivity() {
         // Initialize inference engine
         initializeEngine()
         
-        // Show PiP window immediately
-        showPiPWindow()
-    }
-    
-    private fun makeActivityTransparent() {
-        // Activity is transparent - no content view set
-        // The PiP window is shown via WindowManager.addView()
-        window?.apply {
-            setBackgroundDrawableResource(android.R.color.transparent)
-            setDimAmount(0f)
-        }
-    }
-    
-    private fun createWindowParams(): WindowManager.LayoutParams {
-        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val metrics = android.util.DisplayMetrics()
-        wm.defaultDisplay.getMetrics(metrics)
-        
-        val density = metrics.density
-        val widthPx = (340 * density).toInt()
-        val heightPx = (600 * density).toInt()
-        val marginTopPx = (88 * density).toInt()
-        val marginEndPx = (24 * density).toInt()
-        
-        return WindowManager.LayoutParams(
-            widthPx,
-            heightPx,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
-            },
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = marginEndPx
-            y = marginTopPx
-            // Start off-screen for slide-in animation
-            this.x = widthPx + marginEndPx
-        }
-    }
-    
-    private fun showPiPWindow() {
-        if (windowView != null) {
-            Log.w(TAG, "PiP window already showing")
-            return
-        }
-        
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        
-        // Create lifecycle owner for Compose
-        val lifecycleOwner = GhostLifecycleOwner()
-        lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-        lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-        
-        // Create Compose view with cyberpunk UI
-        composeView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            
-            setContent {
-                GhostTheme {
-                    GhostInterface(
-                        capturedBitmap = capturedBitmap,
-                        responseText = _responseText.value,
-                        isGenerating = _isGenerating.value,
-                        isEngineReady = _isEngineReady.value,
-                        onSendQuery = { query -> handleQuery(query) },
-                        onClose = { closePiPAndFinish() },
-                        onDebugClick = { /* Debug gated by BuildConfig.DEBUG in UI */ }
-                    )
-                }
+        // Set up Compose UI with transparent background
+        setContent {
+            GhostTheme {
+                ChatScreenPiP(
+                    screenshot = capturedBitmap,
+                    responseText = _responseText.value,
+                    isGenerating = _isGenerating.value,
+                    isEngineReady = _isEngineReady.value,
+                    onSendQuery = { query -> handleQuery(query) },
+                    onClose = { finishAndRemoveTask() }
+                )
             }
         }
-        
-        // Create container frame
-        windowView = FrameLayout(this).apply {
-            addView(composeView)
-            
-            // Set up drag/swipe to close
-            val dragHandler = com.ghost.app.ui.DragHandler(
-                params = windowParams,
-                windowManager = windowManager!!,
-                onClose = { closePiPAndFinish() }
-            )
-            setOnTouchListener(dragHandler)
-        }
-        
-        // Add to window manager
-        try {
-            windowManager?.addView(windowView, windowParams)
-            Log.i(TAG, "PiP window added, animating in...")
-            
-            // Animate slide-in from right
-            animateSlideIn()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to show PiP window", e)
-            finish()
-        }
-    }
-    
-    private fun animateSlideIn() {
-        val density = resources.displayMetrics.density
-        val marginEndPx = (24 * density).toInt()
-        val targetX = marginEndPx
-        val startX = windowParams.x
-        
-        // Spring animation for slide-in
-        val springAnimation = android.view.ViewAnimationUtils.createCircularReveal(
-            windowView!!,
-            windowView!!.width,
-            windowView!!.height / 2,
-            0f,
-            windowView!!.width.toFloat()
-        )
-        
-        // Use ValueAnimator for slide-in with spring physics
-        android.animation.ValueAnimator.ofInt(startX, targetX).apply {
-            duration = 400
-            interpolator = android.view.animation.OvershootInterpolator(0.8f)
-            addUpdateListener { animator ->
-                windowParams.x = animator.animatedValue as Int
-                try {
-                    windowManager?.updateViewLayout(windowView, windowParams)
-                } catch (e: Exception) {
-                    // View might be removed
-                }
-            }
-            start()
-        }
-    }
-    
-    private fun animateSlideOutAndClose(onComplete: () -> Unit) {
-        val screenWidth = resources.displayMetrics.widthPixels
-        val startX = windowParams.x
-        
-        android.animation.ValueAnimator.ofInt(startX, screenWidth).apply {
-            duration = 300
-            interpolator = android.view.animation.AccelerateInterpolator()
-            addUpdateListener { animator ->
-                windowParams.x = animator.animatedValue as Int
-                try {
-                    windowManager?.updateViewLayout(windowView, windowParams)
-                } catch (e: Exception) {
-                    // View might be removed
-                }
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    onComplete()
-                }
-            })
-            start()
-        }
-    }
-    
-    private fun closePiPAndFinish() {
-        if (windowView == null) {
-            finish()
-            return
-        }
-        
-        animateSlideOutAndClose {
-            cleanupWindow()
-            finish()
-        }
-    }
-    
-    private fun cleanupWindow() {
-        try {
-            windowView?.let {
-                windowManager?.removeViewImmediate(it)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error removing window", e)
-        }
-        windowView = null
-        composeView = null
     }
     
     private fun initializeEngine() {
@@ -351,8 +175,6 @@ class ChatActivity : ComponentActivity() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
         
-        cleanupWindow()
-        
         inferenceEngine?.close()
         inferenceEngine = null
         
@@ -363,26 +185,81 @@ class ChatActivity : ComponentActivity() {
     }
     
     override fun onBackPressed() {
-        closePiPAndFinish()
+        finishAndRemoveTask()
+    }
+}
+
+// Phosphor Green Cyberpunk Colors
+private val PhosphorGreen = Color(0xFF39FF14)
+private val GunmetalBg = Color(0xFF0A0F0A)
+
+/**
+ * PiP-style Chat Screen - Transparent background with right-aligned PiP window
+ */
+@Composable
+private fun ChatScreenPiP(
+    screenshot: Bitmap?,
+    responseText: String,
+    isGenerating: Boolean,
+    isEngineReady: Boolean,
+    onSendQuery: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    // Animation state for slide-in from right
+    var isVisible by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) {
+        isVisible = true
     }
     
-    /**
-     * Simple lifecycle owner for Compose in floating window.
-     */
-    private class GhostLifecycleOwner : LifecycleOwner, SavedStateRegistryOwner {
-        private val lifecycleRegistry = LifecycleRegistry(this)
-        private val savedStateRegistryController = SavedStateRegistryController.create(this)
-        
-        override val lifecycle: Lifecycle get() = lifecycleRegistry
-        override val savedStateRegistry: SavedStateRegistry get() =
-            savedStateRegistryController.savedStateRegistry
-        
-        init {
-            savedStateRegistryController.performAttach()
-        }
-        
-        fun handleLifecycleEvent(event: Lifecycle.Event) {
-            lifecycleRegistry.handleLifecycleEvent(event)
+    // Full screen transparent container
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent)
+            .padding(end = 24.dp, top = 88.dp, bottom = 24.dp),
+        contentAlignment = Alignment.TopEnd
+    ) {
+        // Animated PiP window
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInHorizontally(
+                initialOffsetX = { it }, // Start from right edge
+                animationSpec = spring(
+                    stiffness = 300f,
+                    dampingRatio = 0.8f
+                )
+            ),
+            exit = slideOutHorizontally(
+                targetOffsetX = { it }, // Exit to right
+                animationSpec = tween(durationMillis = 300)
+            )
+        ) {
+            // PiP Window Container
+            Box(
+                modifier = Modifier
+                    .width(340.dp)
+                    .height(600.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(GunmetalBg.copy(alpha = 0.95f))
+                    // Phosphor border glow effect
+                    .border(
+                        width = 2.dp,
+                        color = PhosphorGreen.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+            ) {
+                // Ghost Interface Content
+                GhostInterface(
+                    capturedBitmap = screenshot,
+                    responseText = responseText,
+                    isGenerating = isGenerating,
+                    isEngineReady = isEngineReady,
+                    onSendQuery = onSendQuery,
+                    onClose = onClose,
+                    onDebugClick = { }
+                )
+            }
         }
     }
 }
