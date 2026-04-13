@@ -88,6 +88,9 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.5")
+    
+    // Dynamic Animation for Iris spring physics
+    implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

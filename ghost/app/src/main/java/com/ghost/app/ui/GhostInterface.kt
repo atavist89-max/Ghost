@@ -1,6 +1,7 @@
 package com.ghost.app.ui
 
 import android.graphics.Bitmap
+import android.view.inputmethod.BaseInputConnection
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.ghost.app.BuildConfig
 import com.ghost.app.ui.theme.GhostColors
 import com.ghost.app.ui.theme.XantiTypewriter
@@ -50,9 +53,10 @@ private val TextPhosphorDim = Color(0xFF8FBC8F)
 private val BorderPhosphor = Color(0xFF39FF14)
 
 /**
- * Ghost PiP UI Component - Cyberpunk Terminal Aesthetic
+ * Ghost PiP UI Component - Cyberpunk Terminal Aesthetic with Iris Mascot
  * 
  * Features:
+ * - Iris mechanical eye mascot in header (replaces GHOST text)
  * - Phosphor green text on gunmetal background
  * - CRT scanline overlay effect
  * - Spring physics slide-in from right
@@ -73,6 +77,45 @@ fun GhostInterface(
     var query by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    
+    // Iris state management
+    var irisState by remember { mutableStateOf(IrisView.State.IDLE) }
+    var cursorPosition by remember { mutableFloatStateOf(0.5f) }
+    var lastTypingTime by remember { mutableLongStateOf(0L) }
+    var isTyping by remember { mutableStateOf(false) }
+    
+    // Track typing and cursor position
+    LaunchedEffect(query) {
+        if (query.isNotEmpty()) {
+            isTyping = true
+            lastTypingTime = System.currentTimeMillis()
+            irisState = IrisView.State.LISTENING
+            // Calculate cursor position (approximate)
+            cursorPosition = if (query.isEmpty()) 0.5f else 0.5f + (query.length % 20) / 40f
+        } else {
+            isTyping = false
+        }
+    }
+    
+    // Auto-transition from LISTENING to FOCUSED after pause
+    LaunchedEffect(lastTypingTime) {
+        if (isTyping && irisState == IrisView.State.LISTENING) {
+            kotlinx.coroutines.delay(1000)
+            if (System.currentTimeMillis() - lastTypingTime >= 1000) {
+                irisState = IrisView.State.FOCUSED
+            }
+        }
+    }
+    
+    // Update iris state based on generation status
+    LaunchedEffect(isGenerating, responseText) {
+        irisState = when {
+            isGenerating && responseText.isEmpty() -> IrisView.State.THINKING
+            isGenerating && responseText.isNotEmpty() -> IrisView.State.ANALYZING
+            !isGenerating && responseText.isNotEmpty() -> IrisView.State.SUCCESS
+            else -> if (isTyping) irisState else IrisView.State.IDLE
+        }
+    }
 
     // Auto-scroll to bottom when new text arrives
     LaunchedEffect(responseText) {
@@ -109,8 +152,10 @@ fun GhostInterface(
                 }
                 .padding(12.dp)
         ) {
-            // Header bar with phosphor border
-            GhostHeader(
+            // Header with Iris mascot
+            GhostHeaderWithIris(
+                irisState = irisState,
+                cursorPosition = cursorPosition,
                 onClose = onClose,
                 onDebugClick = onDebugClick,
                 isGenerating = isGenerating,
@@ -153,11 +198,19 @@ fun GhostInterface(
             // Input area at bottom - stays visible above keyboard
             GhostInputArea(
                 query = query,
-                onQueryChange = { query = it },
+                onQueryChange = { 
+                    query = it
+                    // Update cursor position for Iris
+                    cursorPosition = if (it.isEmpty()) 0.5f else {
+                        // Approximate cursor position based on text length
+                        0.3f + (it.length.coerceAtMost(30) / 30f) * 0.4f
+                    }
+                },
                 onSend = {
                     if (query.isNotBlank()) {
                         onSendQuery(query)
                         query = ""
+                        irisState = IrisView.State.THINKING
                     }
                 },
                 enabled = !isGenerating && isEngineReady
@@ -167,7 +220,9 @@ fun GhostInterface(
 }
 
 @Composable
-private fun GhostHeader(
+private fun GhostHeaderWithIris(
+    irisState: IrisView.State,
+    cursorPosition: Float,
     onClose: () -> Unit,
     onDebugClick: () -> Unit,
     isGenerating: Boolean,
@@ -181,27 +236,37 @@ private fun GhostHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Title with phosphor glow
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Status indicator dot
-            Box(
+        // Left side: Iris mechanical eye mascot
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            // Iris mechanical eyes
+            AndroidView(
+                factory = { context ->
+                    IrisView(context).apply {
+                        setState(irisState)
+                        setCursorPosition(cursorPosition)
+                    }
+                },
+                update = { irisView ->
+                    irisView.setState(irisState)
+                    irisView.setCursorPosition(cursorPosition)
+                },
                 modifier = Modifier
-                    .size(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(
-                        if (isGenerating) PhosphorGreen.copy(alpha = pulseAlpha) else PhosphorDim
-                    )
+                    .width(56.dp)
+                    .height(32.dp)
             )
             
             Spacer(modifier = Modifier.width(8.dp))
             
+            // Small GHOST label (optional, as subtitle)
             Text(
                 text = "GHOST",
-                color = PhosphorGreen,
-                fontSize = 16.sp,
+                color = PhosphorGreen.copy(alpha = 0.7f),
+                fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp
+                letterSpacing = 2.sp
             )
             
             if (isGenerating) {
@@ -209,9 +274,9 @@ private fun GhostHeader(
                 Text(
                     text = "PROCESSING...",
                     color = PhosphorDim,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.sp
+                    letterSpacing = 0.5.sp
                 )
             }
         }
