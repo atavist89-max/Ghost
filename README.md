@@ -1,7 +1,7 @@
 # Ghost v1.0
 
 > ⚠️ **PLACEHOLDER IMPLEMENTATION** ⚠️  
-> This is a placeholder UI implementation until the correct API is released. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual LLM inference. The production API integration is pending final SDK release.
+> This is a placeholder UI implementation until the **LiteRT-LM inference API** is fully released. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual on-device LLM inference. The production API integration for Gemma 4 E2B model loading and Hexagon NPU acceleration is pending final SDK release.
 
 ---
 
@@ -81,7 +81,7 @@ ghost/
 │   │   ├── GhostWindowManager.kt # Window management
 │   │   └── theme/                # Cyberpunk colors & typography
 │   └── inference/
-│       └── InferenceEngine.kt    # LiteRT-LM integration
+│       └── InferenceEngine.kt    # LiteRT-LM integration (pending API)
 ├── app/src/main/res/font/
 │   └── xanti_typewriter_regular.ttf  # Typewriter response font
 └── build.gradle.kts
@@ -99,7 +99,7 @@ ghost/
 | **Font** | Xanti Typewriter (responses), Monospace (UI) |
 | **Colors** | Phosphor green `#39FF14` on gunmetal `#0A0F0A` |
 | **Animation** | Spring physics (stiffness 300, damping 0.8) |
-| **LLM** | Gemma 4 E2B via LiteRT-LM (placeholder) |
+| **LLM** | Gemma 4 E2B via LiteRT-LM (pending API) |
 
 ---
 
@@ -107,10 +107,10 @@ ghost/
 
 This build demonstrates the complete visual and interaction design but uses placeholder responses. The production version will integrate:
 
-- [ ] Actual LiteRT-LM inference engine
-- [ ] Gemma 4 E2B model loading
-- [ ] Hexagon NPU acceleration
-- [ ] Streaming token generation
+- [ ] **LiteRT-LM inference API** — On-device model loading and inference
+- [ ] **Gemma 4 E2B vision model** — Multimodal understanding of screenshots
+- [ ] **Hexagon NPU acceleration** — Hardware-accelerated inference
+- [ ] **Streaming token generation** — Real-time response streaming
 
 The UI, animations, Iris mascot behaviors, and PiP mechanics are production-ready.
 
