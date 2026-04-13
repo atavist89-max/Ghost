@@ -252,7 +252,7 @@ private fun PipBoyHeader(
                 Text(
                     text = "[$label]",
                     fontFamily = VT323,
-                    fontSize = 10.sp,
+                    fontSize = 20.sp,
                     color = if (isActive) PhosphorBright else PhosphorDim.copy(alpha = 0.6f)
                 )
             }
@@ -280,7 +280,7 @@ private fun PipBoyHeader(
                 Text(
                     text = "⚙",
                     fontFamily = VT323,
-                    fontSize = 14.sp,
+                    fontSize = 28.sp,
                     color = TextPhosphorDim
                 )
             }
@@ -316,7 +316,7 @@ private fun HolotapeThumbnail(
         Text(
             text = "DATA",
             fontFamily = VT323,
-            fontSize = 8.sp,
+            fontSize = 16.sp,
             color = PhosphorDim.copy(alpha = 0.7f)
         )
         
@@ -377,16 +377,16 @@ private fun TerminalResponseArea(
                     Text(
                         text = String.format("%02d", index + 1),
                         fontFamily = VT323,
-                        fontSize = 11.sp,
+                        fontSize = 22.sp,
                         color = PhosphorDim.copy(alpha = 0.5f),
-                        lineHeight = 14.sp
+                        lineHeight = 28.sp
                     )
                 }
             } else {
                 Text(
                     text = "01",
                     fontFamily = VT323,
-                    fontSize = 11.sp,
+                    fontSize = 22.sp,
                     color = PhosphorDim.copy(alpha = 0.5f)
                 )
             }
@@ -416,7 +416,7 @@ private fun TerminalResponseArea(
                     Text(
                         text = "INITIALIZING...",
                         fontFamily = VT323,
-                        fontSize = 10.sp,
+                        fontSize = 20.sp,
                         color = PhosphorDim
                     )
                 }
@@ -425,7 +425,7 @@ private fun TerminalResponseArea(
                 Text(
                     text = "> STANDBY",
                     fontFamily = VT323,
-                    fontSize = 12.sp,
+                    fontSize = 24.sp,
                     color = TextPhosphorDim.copy(alpha = 0.4f)
                 )
             } else {
@@ -438,9 +438,9 @@ private fun TerminalResponseArea(
                     Text(
                         text = responseText,
                         fontFamily = VT323,
-                        fontSize = 12.sp,
+                        fontSize = 24.sp,
                         color = TextPhosphor,
-                        lineHeight = 14.sp,
+                        lineHeight = 28.sp,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -471,7 +471,7 @@ private fun BlinkingCursor() {
     Text(
         text = "█",
         fontFamily = VT323,
-        fontSize = 12.sp,
+        fontSize = 24.sp,
         color = PhosphorGreen.copy(alpha = alpha)
     )
 }
@@ -502,7 +502,7 @@ private fun TerminalInputLine(
         Text(
             text = ">",
             fontFamily = VT323,
-            fontSize = 14.sp,
+            fontSize = 28.sp,
             color = PhosphorGreen,
             modifier = Modifier.padding(end = 4.dp)
         )
@@ -514,7 +514,7 @@ private fun TerminalInputLine(
             enabled = enabled,
             textStyle = TextStyle(
                 color = TextPhosphor,
-                fontSize = 13.sp,
+                fontSize = 26.sp,
                 fontFamily = VT323,
                 letterSpacing = 0.1.sp
             ),
@@ -524,7 +524,7 @@ private fun TerminalInputLine(
                         Text(
                             text = "_",
                             fontFamily = VT323,
-                            fontSize = 13.sp,
+                            fontSize = 26.sp,
                             color = TextPhosphorDim.copy(alpha = 0.3f)
                         )
                     }
@@ -552,7 +552,7 @@ private fun TerminalInputLine(
             Text(
                 text = "⏎",
                 fontFamily = VT323,
-                fontSize = 14.sp,
+                fontSize = 28.sp,
                 color = if (enabled && query.isNotBlank()) PhosphorGreen else TextPhosphorDim.copy(alpha = 0.3f)
             )
         }
