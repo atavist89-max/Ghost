@@ -51,7 +51,7 @@ class InferenceEngine(private val context: Context) {
     private val mainScope = CoroutineScope(Dispatchers.Main)
     private val inferenceScope = CoroutineScope(Dispatchers.Default)
 
-    private val tavilyService = TavilySearchService()
+    private val tavilyService = TavilySearchService(context)
 
     /**
      * Initialize the inference engine with the model.

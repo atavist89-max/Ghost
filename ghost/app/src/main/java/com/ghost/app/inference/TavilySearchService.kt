@@ -1,7 +1,8 @@
 package com.ghost.app.inference
 
+import android.content.Context
 import android.util.Log
-import com.ghost.app.BuildConfig
+import com.ghost.app.utils.GhostPaths
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
@@ -10,21 +11,22 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
  * Tavily Search API service for web-enhanced local LLM queries.
- *
- * Architecture: Search -> Local LLM (not full cloud)
- * - Query goes to Tavily API
- * - Search results injected into local Gemma prompt as context
- * - Screenshot stays local, never uploaded to Tavily
- *
- * Free tier: 1,000 credits/month, resets 1st of each month
- * Credits displayed in UI only after first successful search
+ * Reads API key from external storage (GhostModels folder) to allow
+ * key rotation without APK rebuild.
  */
-class TavilySearchService {
+class TavilySearchService(private val context: Context) {
+
+    companion object {
+        private const val TAG = "TavilySearch"
+        private const val KEY_FILENAME = "tavily_key.txt"
+        private const val DEFAULT_KEY = ""
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -32,12 +34,46 @@ class TavilySearchService {
         .build()
 
     private val gson = Gson()
-    private val apiKey = BuildConfig.TAVILY_API_KEY
+
+    // Read key from external storage instead of BuildConfig
+    private val apiKey: String by lazy {
+        readApiKeyFromStorage()
+    }
+
+    /**
+     * Read API key from GhostModels folder using same logic as GhostPaths.
+     * Location: /sdcard/Download/GhostModels/tavily_key.txt
+     */
+    private fun readApiKeyFromStorage(): String {
+        return try {
+            // Use same path resolution as GhostPaths.findModelFile()
+            val modelsDir = GhostPaths.findModelFile()?.parentFile
+                ?: File(GhostPaths.MODEL_PATH).parentFile
+                ?: context.getExternalFilesDir(null)?.resolve("models")
+                ?: context.filesDir.resolve("models")
+
+            val keyFile = File(modelsDir, KEY_FILENAME)
+
+            if (keyFile.exists() && keyFile.canRead()) {
+                val key = keyFile.readText().trim()
+                Log.i(TAG, "Tavily API key loaded from: ${keyFile.absolutePath}")
+                key
+            } else {
+                Log.w(TAG, "$KEY_FILENAME not found in ${modelsDir.absolutePath}")
+                DEFAULT_KEY
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read Tavily API key: ${e.message}", e)
+            DEFAULT_KEY
+        }
+    }
+
+    fun isConfigured(): Boolean = apiKey.isNotBlank() && apiKey.startsWith("tvly-")
 
     data class SearchRequest(
         @SerializedName("api_key") val apiKey: String,
         val query: String,
-        @SerializedName("search_depth") val searchDepth: String = "basic", // "basic" = 1 credit, "advanced" = 2 credits
+        @SerializedName("search_depth") val searchDepth: String = "basic",
         @SerializedName("max_results") val maxResults: Int = 3,
         @SerializedName("include_answer") val includeAnswer: Boolean = true,
         @SerializedName("include_images") val includeImages: Boolean = false
@@ -59,19 +95,16 @@ class TavilySearchService {
 
     /**
      * Perform web search via Tavily API.
-     *
-     * @param query User's search query
-     * @return Pair of (search context string for LLM prompt, remaining credits from header)
      */
     suspend fun search(query: String): Pair<String, Int?> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
-            throw IllegalStateException("Tavily API key not configured")
+        if (!isConfigured()) {
+            throw IllegalStateException("Tavily API key not configured. Add $KEY_FILENAME to GhostModels folder.")
         }
 
         val requestBody = SearchRequest(
             apiKey = apiKey,
             query = query,
-            searchDepth = "basic", // 1 credit per search
+            searchDepth = "basic",
             maxResults = 3,
             includeAnswer = true
         )
@@ -89,7 +122,6 @@ class TavilySearchService {
                 throw IOException("Tavily API error: ${response.code} ${response.message}")
             }
 
-            // Extract remaining credits from header
             val remainingCredits = response.header("X-RateLimit-Remaining")?.toIntOrNull()
 
             val responseBody = response.body?.string()
@@ -97,7 +129,6 @@ class TavilySearchService {
 
             val searchResult = gson.fromJson(responseBody, SearchResponse::class.java)
 
-            // Build context string for LLM prompt
             val contextBuilder = StringBuilder()
             contextBuilder.append("WEB SEARCH RESULTS:\n")
 
@@ -113,6 +144,4 @@ class TavilySearchService {
             Pair(contextBuilder.toString().trim(), remainingCredits)
         }
     }
-
-    fun isConfigured(): Boolean = apiKey.isNotBlank() && apiKey.startsWith("tvly-")
 }

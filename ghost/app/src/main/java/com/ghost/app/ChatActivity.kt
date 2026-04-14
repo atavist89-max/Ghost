@@ -105,7 +105,7 @@ class ChatActivity : ComponentActivity() {
             Log.i(TAG, "Piper TTS initialized: $initialized, sampleRate=${getSampleRate()}")
         }
 
-        val tavilyConfigured = TavilySearchService().isConfigured()
+        val tavilyConfigured = TavilySearchService(applicationContext).isConfigured()
         Log.d(TAG, "Tavily configured: $tavilyConfigured")
 
         // Set up Compose UI with transparent background and keyboard handling

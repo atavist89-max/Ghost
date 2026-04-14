@@ -20,10 +20,7 @@ android {
             abiFilters += listOf("arm64-v8a")
         }
 
-        val tavilyApiKey: String = project.findProperty("TAVILY_API_KEY") as String?
-            ?: System.getenv("TAVILY_API_KEY")
-            ?: ""
-        buildConfigField("String", "TAVILY_API_KEY", "\"$tavilyApiKey\"")
+
     }
 
     buildTypes {
