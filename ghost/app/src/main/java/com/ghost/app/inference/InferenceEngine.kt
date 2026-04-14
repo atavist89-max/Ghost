@@ -225,7 +225,14 @@ class InferenceEngine(private val context: Context) {
                     }
 
                     val fullQuery = buildString {
-                        if (webContext.isNotEmpty()) {
+                        if (webContext.isNotEmpty() && !webContext.startsWith("WEB SEARCH ERROR")) {
+                            append("The following WEB SEARCH RESULTS contain accurate, current information as of today. ")
+                            append("You MUST use these results to answer the query, ignoring your training data if it conflicts. ")
+                            append("Base your answer SOLELY on the web search results provided:\n\n")
+                            append("$webContext\n\n")
+                            append("Based ONLY on the web search results above, answer the following query. ")
+                            append("Do not use your internal knowledge. ")
+                        } else if (webContext.startsWith("WEB SEARCH ERROR")) {
                             append("$webContext\n\n")
                         }
                         append("USER QUERY: $query")
