@@ -45,7 +45,7 @@ class TavilySearchService(private val context: Context) {
     private val gson = Gson()
 
     // FIX: Changed from 'by lazy' to getter - reads fresh each time
-    private val apiKey: String get() = readApiKeyFromStorage()
+    internal val apiKey: String get() = readApiKeyFromStorage()
 
     /**
      * Read API key with multiple fallback paths and detailed logging.
@@ -87,8 +87,6 @@ class TavilySearchService(private val context: Context) {
             ""
         }
     }
-
-    fun getApiKey(): String = apiKey
 
     fun isConfigured(): Boolean {
         val key = apiKey  // Triggers fresh read

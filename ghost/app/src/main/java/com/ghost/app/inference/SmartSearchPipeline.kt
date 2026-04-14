@@ -63,7 +63,7 @@ class SmartSearchPipeline(
         creditsUsed++
         return withContext(Dispatchers.IO) {
             val requestBody = TavilySearchService.SearchRequest(
-                apiKey = tavilyService.getApiKey(),
+                apiKey = tavilyService.apiKey,
                 query = query,
                 searchDepth = "basic",
                 maxResults = 3,
