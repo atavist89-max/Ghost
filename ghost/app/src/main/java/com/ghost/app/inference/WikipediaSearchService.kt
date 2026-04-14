@@ -10,7 +10,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
-import java.net.URLEncoder
+
 
 /**
  * Wikipedia search service using the MediaWiki API.
@@ -51,7 +51,6 @@ class WikipediaSearchService(private val context: Context) {
 
         val title = bestResult.title
         val content = fetchArticleContent(title)
-            ?: throw IllegalStateException("Failed to fetch Wikipedia article: $title")
 
         logToFile("WIKI", "Full article length: ${content.length} chars")
 
@@ -139,18 +138,24 @@ class WikipediaSearchService(private val context: Context) {
         }
     }
 
-    private fun fetchArticleContent(title: String): String? {
-        val encodedTitle = URLEncoder.encode(title, "UTF-8")
+    private fun fetchArticleContent(title: String): String {
+        // Wikipedia uses underscores in titles; encode after replacing spaces
+        val wikiTitle = title.replace(" ", "_")
+        logToFile("WIKI", "Extracting article: '$title' -> wikiTitle: '$wikiTitle'")
+
         val url = API_ENDPOINT.toHttpUrlOrNull()?.newBuilder()
             ?.addQueryParameter("action", "query")
             ?.addQueryParameter("prop", "extracts")
             ?.addQueryParameter("explaintext", "true")
             ?.addQueryParameter("exsectionformat", "plain")
-            ?.addQueryParameter("titles", encodedTitle)
+            ?.addQueryParameter("exsentences", "30")
+            ?.addQueryParameter("titles", wikiTitle)
             ?.addQueryParameter("format", "json")
             ?.addQueryParameter("origin", "*")
             ?.build()
-            ?: return null
+            ?: throw IllegalStateException("Failed to build article URL")
+
+        logToFile("WIKI", "Request URL: $url")
 
         val request = Request.Builder()
             .url(url)
@@ -158,11 +163,21 @@ class WikipediaSearchService(private val context: Context) {
             .build()
 
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val body = response.body?.string() ?: return null
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Wikipedia article HTTP ${response.code}")
+            }
+            val body = response.body?.string()
+                ?: throw IllegalStateException("Empty article response")
 
             val result = gson.fromJson(body, ExtractResponse::class.java)
-            val page = result.query?.pages?.values?.firstOrNull() ?: return null
+            val page = result.query?.pages?.values?.firstOrNull()
+                ?: throw IllegalStateException("No page found for: $title")
+
+            logToFile("WIKI", "Got ${page.extract?.length ?: 0} chars for '${page.title}'")
+
+            if (page.extract.isNullOrEmpty()) {
+                throw IllegalStateException("Article '${page.title}' has no content")
+            }
             return page.extract
         }
     }
