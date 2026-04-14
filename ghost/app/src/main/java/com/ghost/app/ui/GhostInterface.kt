@@ -569,6 +569,7 @@ private fun RemainingCreditsIndicator(
             fontSize = 14.sp, // Was 10.sp
             color = when {
                 credits == -1 -> PhosphorDim.copy(alpha = 0.5f)
+                credits == null -> PhosphorDim
                 credits <= 50 -> Color(0xFFFF4444)
                 credits <= 200 -> Color(0xFFFFAA00)
                 else -> PhosphorGreen
