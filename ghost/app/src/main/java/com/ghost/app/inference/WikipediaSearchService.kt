@@ -53,8 +53,39 @@ class WikipediaSearchService(private val context: Context) {
         val content = fetchArticleContent(title)
             ?: throw IllegalStateException("Failed to fetch Wikipedia article: $title")
 
-        logToFile("WIKI", "Article fetched: '$title' (${content.length} chars)")
-        Pair(title, content)
+        logToFile("WIKI", "Full article length: ${content.length} chars")
+
+        // Truncate to fit within Gemma 4 E2B's ~4K token context window
+        val truncatedContent = extractFirstSentences(content, 25)
+        logToFile("WIKI", "Truncated to: ${truncatedContent.length} chars (~${truncatedContent.length / 4} tokens)")
+
+        Pair(title, truncatedContent)
+    }
+
+    /**
+     * Extract first N sentences to fit within LLM context budget.
+     * Conservative target: ~2,000 tokens for article content.
+     */
+    private fun extractFirstSentences(text: String, maxSentences: Int = 25): String {
+        val sentences = text.split(Regex("(?<=[.!?])\\s+"))
+        return sentences.take(maxSentences).joinToString(" ")
+    }
+
+    /**
+     * Fallback character-based truncation at sentence boundary.
+     */
+    private fun truncateArticle(text: String, maxChars: Int = 8000): String {
+        return if (text.length > maxChars) {
+            val truncated = text.take(maxChars)
+            val lastSentenceEnd = truncated.lastIndexOfAny(charArrayOf('.', '!', '?'))
+            if (lastSentenceEnd > 0) {
+                truncated.substring(0, lastSentenceEnd + 1) + " [article truncated]"
+            } else {
+                truncated + "..."
+            }
+        } else {
+            text
+        }
     }
 
     private fun logToFile(tag: String, message: String) {

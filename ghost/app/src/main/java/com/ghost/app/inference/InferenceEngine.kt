@@ -205,7 +205,8 @@ class InferenceEngine(private val context: Context) {
                         articleTitle = title
                         articleContent = content
                         onWebCreditsUpdate?.invoke(-1) // No credit tracking for Wikipedia
-                        Log.i(TAG, "Wikipedia article ready: '$title' (${content.length} chars)")
+                        val estimatedArticleTokens = content.length / 4
+                        Log.i(TAG, "Wikipedia article ready: '$title' (${content.length} chars, ~$estimatedArticleTokens tokens)")
                     } catch (e: Exception) {
                         Log.e(TAG, "Wikipedia search failed: ${e.message}", e)
                         val errorMsg = "Failed to fetch Wikipedia article: ${e.message ?: "Unknown error"}"
@@ -238,7 +239,7 @@ class InferenceEngine(private val context: Context) {
                             append(articleContent)
                             append("\n\nuser_query: ")
                             append(query)
-                            append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. Start your response with 'Based on ")
+                            append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. If article was truncated, focus on key facts in the provided content. Start your response with 'Based on ")
                             append(articleTitle)
                             append("' followed by exactly 5 concise sentences. Do not include any other text.")
                         }
@@ -246,7 +247,13 @@ class InferenceEngine(private val context: Context) {
                         "$basePersona USER QUERY: $query"
                     }
 
-                    Log.i(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length}")
+                    val estimatedTotalTokens = finalPrompt.length / 4
+                    Log.i(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length} chars, ~$estimatedTotalTokens tokens")
+                    logToFile("ENGINE", "Article: ~${articleContent?.length?.div(4) ?: 0} tokens (${articleContent?.length ?: 0} chars)")
+                    logToFile("ENGINE", "Total prompt: ~$estimatedTotalTokens tokens (${finalPrompt.length} chars)")
+                    if (estimatedTotalTokens > 3500) {
+                        logToFile("ENGINE_WARNING", "Prompt approaching 4K limit! May fail.")
+                    }
 
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)
