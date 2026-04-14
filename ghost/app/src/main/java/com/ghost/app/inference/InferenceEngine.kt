@@ -195,33 +195,37 @@ class InferenceEngine(private val context: Context) {
 
         inferenceScope.launch {
             try {
-                // Fetch web search results if enabled (before LLM inference)
-                var webContext = ""
-                var remainingCredits: Int? = null
-
+                // If web search enabled, run smart pipeline first
                 if (useWebSearch && tavilyService.isConfigured()) {
                     try {
-                        val (context, credits) = tavilyService.search(query)
-                        webContext = context
-                        remainingCredits = credits
-                        Log.i(TAG, "Tavily search complete. Remaining credits: $credits")
-                        if (remainingCredits != null) {
-                            onWebCreditsUpdate?.invoke(remainingCredits)
-                        } else {
-                            Log.w(TAG, "X-RateLimit-Remaining header missing from Tavily response")
-                            onWebCreditsUpdate?.invoke(-1) // Sentinel for unknown
+                        Log.i(TAG, "Running SmartSearchPipeline for query: $query")
+                        val pipeline = SmartSearchPipeline(context, this@InferenceEngine)
+                        val (answer, _) = pipeline.search(query)
+                        onWebCreditsUpdate?.invoke(-1) // Pipeline uses 1-2 credits, exact count unknown
+
+                        // Stream answer tokens to UI
+                        val tokens = answer.split(" ")
+                        for (token in tokens) {
+                            mainScope.launch { onToken("$token ") }
+                            kotlinx.coroutines.delay(30)
                         }
+
+                        withContext(Dispatchers.Main) { onComplete() }
+                        return@launch // Skip normal LLM path - pipeline already produced answer
                     } catch (e: Exception) {
-                        Log.e(TAG, "Web search failed: ${e.message}", e)
+                        Log.e(TAG, "SmartSearchPipeline failed: ${e.message}", e)
                         val errorMsg = "WEB SEARCH ERROR: ${e.message ?: "Unknown error"}"
-                        webContext = errorMsg
                         withContext(Dispatchers.Main) {
                             onWebSearchError?.invoke(errorMsg)
                         }
+                        // Fall through to normal local LLM with error noted
                     }
                 } else if (useWebSearch) {
-                    webContext = "[Web search unavailable: API key not configured. Create /storage/emulated/0/Download/GhostModels/tavily_key.txt]"
+                    val errorMsg = "[Web search unavailable: API key not configured. Create /storage/emulated/0/Download/GhostModels/tavily_key.txt]"
                     Log.w(TAG, "Web search requested but API key not configured")
+                    withContext(Dispatchers.Main) {
+                        onWebSearchError?.invoke(errorMsg)
+                    }
                 }
 
                 val engineInstance = engine ?: throw IllegalStateException("Engine is null")
@@ -234,37 +238,10 @@ class InferenceEngine(private val context: Context) {
                         "You are a robotic computer assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     }
 
-                    val hasRealContent = webContext.length > "WEB SEARCH RESULTS:\n".length + 10
-
-                    logToFile("INFERENCE", "Web context length: ${webContext.length}")
-                    logToFile("INFERENCE", "Has real content: $hasRealContent")
-                    logToFile("INFERENCE", "Web context preview: ${webContext.take(100)}")
-
-                    val fullQuery = buildString {
-                        if (hasRealContent && !webContext.startsWith("WEB SEARCH ERROR")) {
-                            append("The following WEB SEARCH RESULTS contain accurate, current information as of today. ")
-                            append("You MUST use these results to answer the query, ignoring your training data if it conflicts. ")
-                            append("Base your answer SOLELY on the web search results provided:\n\n")
-                            append("$webContext\n\n")
-                            append("Based ONLY on the web search results above, answer the following query. ")
-                            append("Do not use your internal knowledge. ")
-                        } else if (webContext.startsWith("WEB SEARCH ERROR") || !hasRealContent) {
-                            append("[Web search returned no results, using local knowledge] \n\n")
-                            if (webContext.startsWith("WEB SEARCH ERROR")) {
-                                append("$webContext\n\n")
-                            }
-                        }
-                        append("USER QUERY: $query")
-                    }
+                    val fullQuery = "USER QUERY: $query"
 
                     val finalPrompt = "$personaPrompt $fullQuery"
                     Log.e(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length}")
-                    Log.e(TAG, "WEB CONTEXT IN PROMPT: ${fullQuery.contains("WEB SEARCH RESULTS")}")
-                    Log.e(TAG, "WEB CONTEXT PREVIEW: ${webContext.take(200)}")
-
-                    logToFile("INFERENCE", "Final prompt length: ${finalPrompt.length}")
-                    logToFile("INFERENCE", "Contains web results: ${finalPrompt.contains("WEB SEARCH RESULTS")}")
-                    logToFile("INFERENCE", "Prompt ends with: ${finalPrompt.takeLast(100)}")
 
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)
@@ -416,6 +393,21 @@ $query
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error cleaning up screenshot cache", e)
+        }
+    }
+
+    /**
+     * Quick single-prompt inference for pipeline stages.
+     * Does NOT use streaming. Caller must handle errors.
+     */
+    fun quickInfer(prompt: String): String {
+        val engineInstance = engine ?: throw IllegalStateException("Engine not initialized")
+        val conversation = engineInstance.createConversation()
+        return try {
+            val response = conversation.sendMessage(Message.of(prompt))
+            response.toString().trim()
+        } finally {
+            conversation.close()
         }
     }
 

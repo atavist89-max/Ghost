@@ -88,6 +88,8 @@ class TavilySearchService(private val context: Context) {
         }
     }
 
+    fun getApiKey(): String = apiKey
+
     fun isConfigured(): Boolean {
         val key = apiKey  // Triggers fresh read
         val isBlank = key.isBlank()
