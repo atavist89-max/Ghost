@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.net.URLEncoder
 
 /**
@@ -31,21 +32,52 @@ class WikipediaSearchService(private val context: Context) {
      * Search Wikipedia for the best matching article and return its full text.
      *
      * @param query User search query
-     * @return Pair of (article title, article content) or nulls if no result
+     * @return Pair of (article title, article content)
      */
-    suspend fun search(query: String): Pair<String, String> = withContext(Dispatchers.IO) {
+    suspend fun searchAndExtract(query: String): Pair<String, String> = withContext(Dispatchers.IO) {
+        clearLogFile()
+        logToFile("WIKI", "=== New Search ===")
+        logToFile("WIKI", "Query: $query")
+
         val searchResults = performSearch(query)
+        logToFile("WIKI", "Search returned ${searchResults.size} results")
+
         if (searchResults.isEmpty()) {
             throw IllegalStateException("No Wikipedia results found for: $query")
         }
 
         val bestResult = searchResults.first()
+        logToFile("WIKI", "Best result title: ${bestResult.title}")
+
         val title = bestResult.title
         val content = fetchArticleContent(title)
             ?: throw IllegalStateException("Failed to fetch Wikipedia article: $title")
 
-        Log.i(TAG, "Wikipedia article fetched: '$title' (${content.length} chars)")
+        logToFile("WIKI", "Article fetched: '$title' (${content.length} chars)")
         Pair(title, content)
+    }
+
+    private fun logToFile(tag: String, message: String) {
+        try {
+            val dir = File("/storage/emulated/0/Download/GhostModels")
+            if (!dir.exists()) dir.mkdirs()
+
+            val logFile = File(dir, "wikipedia_debug.txt")
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+            logFile.appendText("[$timestamp] [$tag] $message\n")
+            Log.d(tag, message)
+        } catch (e: Exception) {
+            Log.e("WikipediaSearch", "Failed to write log: ${e.message}")
+        }
+    }
+
+    private fun clearLogFile() {
+        try {
+            val logFile = File("/storage/emulated/0/Download/GhostModels/wikipedia_debug.txt")
+            logFile.delete()
+        } catch (e: Exception) {
+            // Silent fail
+        }
     }
 
     private fun performSearch(query: String): List<SearchResult> {

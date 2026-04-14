@@ -201,18 +201,21 @@ class InferenceEngine(private val context: Context) {
                 if (useWebSearch) {
                     try {
                         Log.i(TAG, "Fetching Wikipedia article for query: $query")
-                        val (title, content) = wikipediaService.search(query)
+                        val (title, content) = wikipediaService.searchAndExtract(query)
                         articleTitle = title
                         articleContent = content
                         onWebCreditsUpdate?.invoke(-1) // No credit tracking for Wikipedia
                         Log.i(TAG, "Wikipedia article ready: '$title' (${content.length} chars)")
                     } catch (e: Exception) {
                         Log.e(TAG, "Wikipedia search failed: ${e.message}", e)
-                        val errorMsg = "WEB SEARCH ERROR: ${e.message ?: "Unknown error"}"
+                        val errorMsg = "Failed to fetch Wikipedia article: ${e.message ?: "Unknown error"}"
+                        logToFile("ENGINE_ERROR", errorMsg)
                         withContext(Dispatchers.Main) {
                             onWebSearchError?.invoke(errorMsg)
+                            onError(errorMsg)
+                            onComplete()
                         }
-                        // Fall through to normal local LLM
+                        return@launch // HARD STOP - no local fallback
                     }
                 }
 
@@ -279,6 +282,10 @@ class InferenceEngine(private val context: Context) {
 
                     withContext(Dispatchers.Main) {
                         onComplete()
+                    }
+
+                    if (useWebSearch) {
+                        return@launch // HARD STOP SUCCESS
                     }
                 } finally {
                     conversation.close()

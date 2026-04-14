@@ -82,6 +82,12 @@ class ChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate - PiP Activity mode")
 
+        // Clear old debug files at startup
+        try {
+            File("/storage/emulated/0/Download/GhostModels/debug_log.txt").delete()
+            File("/storage/emulated/0/Download/GhostModels/wikipedia_debug.txt").delete()
+        } catch (e: Exception) { }
+
         // Enable edge-to-edge for transparent activity
         enableEdgeToEdge()
 
@@ -120,6 +126,11 @@ class ChatActivity : ComponentActivity() {
                     onNetToggle = { _isNetEnabled.value = it },
                     isNetConfigured = true,
                     onSendQuery = { query ->
+                        // Block retry if previous web search failed
+                        if (_isNetEnabled.value && _responseText.value.contains("WEB SEARCH ERROR")) {
+                            _responseText.value = "WEB SEARCH ERROR: Previous Wikipedia search failed.\n\nTurn OFF web toggle to use local LLM."
+                            return@onSendQuery
+                        }
                         handleQuery(
                             query = query,
                             useVisualMode = _isVisualMode.value,
@@ -194,14 +205,18 @@ class ChatActivity : ComponentActivity() {
             },
             onError = { error ->
                 mainScope.launch {
-                    _responseText.value = "Error: $error"
+                    if (_isNetEnabled.value) {
+                        _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
+                    } else {
+                        _responseText.value += "\nError: $error"
+                    }
                     _isGenerating.value = false
                     DebugLogger.e(TAG, "Inference error: $error")
                 }
             },
             onWebSearchError = { error ->
                 mainScope.launch {
-                    _responseText.value = error
+                    _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
                     Toast.makeText(this@ChatActivity, error, Toast.LENGTH_LONG).show()
                 }
             }
