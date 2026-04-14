@@ -200,8 +200,8 @@ class InferenceEngine(private val context: Context) {
                     try {
                         Log.i(TAG, "Running SmartSearchPipeline for query: $query")
                         val pipeline = SmartSearchPipeline(context, this@InferenceEngine)
-                        val (answer, _) = pipeline.search(query)
-                        onWebCreditsUpdate?.invoke(-1) // Pipeline uses 1-2 credits, exact count unknown
+                        val (answer, remainingCredits) = pipeline.search(query)
+                        onWebCreditsUpdate?.invoke(remainingCredits)
 
                         // Stream answer tokens to UI
                         val tokens = answer.split(" ")

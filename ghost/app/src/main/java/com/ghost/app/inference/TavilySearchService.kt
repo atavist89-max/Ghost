@@ -30,6 +30,7 @@ class TavilySearchService(private val context: Context) {
     private fun logToFile(tag: String, message: String) {
         try {
             val logFile = File("/storage/emulated/0/Download/GhostModels/debug_log.txt")
+            logFile.parentFile?.mkdirs()
             val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
             logFile.appendText("[$timestamp] [$tag] $message\n")
         } catch (e: Exception) {
@@ -46,6 +47,15 @@ class TavilySearchService(private val context: Context) {
 
     // FIX: Changed from 'by lazy' to getter - reads fresh each time
     internal val apiKey: String get() = readApiKeyFromStorage()
+
+    // Client-side credit tracking
+    private var clientSideCredits = 1000
+
+    fun deductCredits(amount: Int) {
+        clientSideCredits -= amount
+    }
+
+    fun getCreditsForDisplay(): Int = clientSideCredits
 
     /**
      * Read API key with multiple fallback paths and detailed logging.
@@ -125,12 +135,20 @@ class TavilySearchService(private val context: Context) {
     )
 
     suspend fun search(query: String): Pair<String, Int?> = withContext(Dispatchers.IO) {
-        Log.d(TAG, "search() called with query: ${query.take(30)}...")
+        val (result, credits) = searchRaw(query)
 
-        // Clear previous log
-        try {
-            File("/storage/emulated/0/Download/GhostModels/debug_log.txt").delete()
-        } catch (e: Exception) { /* ignore */ }
+        val contextBuilder = StringBuilder()
+        contextBuilder.append("WEB SEARCH RESULTS:\n")
+        result.results?.take(3)?.forEachIndexed { index, resultItem ->
+            contextBuilder.append("[${index + 1}] ${resultItem.title}\n")
+            contextBuilder.append("    ${resultItem.content.take(200)}...\n\n")
+        }
+
+        Pair(contextBuilder.toString().trim(), credits)
+    }
+
+    suspend fun searchRaw(query: String): Pair<SearchResponse, Int?> = withContext(Dispatchers.IO) {
+        logToFile("TAVILY", "Query: $query")
 
         if (!isConfigured()) {
             Log.e(TAG, "search() aborted: API not configured")
@@ -142,7 +160,7 @@ class TavilySearchService(private val context: Context) {
             query = query,
             searchDepth = "basic",
             maxResults = 3,
-            includeAnswer = true
+            includeAnswer = false
         )
 
         val json = gson.toJson(requestBody)
@@ -153,65 +171,27 @@ class TavilySearchService(private val context: Context) {
             .post(body)
             .build()
 
-        Log.d(TAG, "Sending request to Tavily API...")
-
         client.newCall(request).execute().use { response ->
-            Log.d(TAG, "Response code: ${response.code}")
+            // LOG ALL HEADERS
+            val headers = StringBuilder()
+            response.headers.forEach { (name, value) -> headers.append("$name: $value\n") }
+            logToFile("TAVILY_HEADERS", headers.toString())
+
+            val remainingCredits = response.header("X-RateLimit-Remaining")?.toIntOrNull()
+            logToFile("TAVILY", "Rate limit: $remainingCredits")
 
             if (!response.isSuccessful) {
-                val errorBody = response.body?.string()
-                Log.e(TAG, "API error: ${response.code}, body: $errorBody")
+                logToFile("TAVILY_ERROR", "HTTP ${response.code}")
                 throw IOException("Tavily API error: ${response.code}")
             }
 
-            val remainingCredits = response.header("X-RateLimit-Remaining")?.toIntOrNull()
-            Log.d(TAG, "Remaining credits from header: $remainingCredits")
+            val responseBody = response.body?.string() ?: throw IOException("Empty response")
+            logToFile("TAVILY_RAW", "Response length: ${responseBody.length}")
 
-            val responseBody = response.body?.string()
-                ?: throw IOException("Empty response")
+            val result = gson.fromJson(responseBody, SearchResponse::class.java)
+            logToFile("TAVILY", "Results: ${result.results?.size ?: 0}, Answer: ${result.answer != null}")
 
-            val searchResult = gson.fromJson(responseBody, SearchResponse::class.java)
-
-            Log.e(TAG, "RAW RESPONSE: $responseBody")
-            Log.e(TAG, "Parsed results isNull: ${searchResult.results == null}")
-            Log.e(TAG, "Parsed results size: ${searchResult.results?.size ?: 0}")
-            Log.e(TAG, "Parsed answer isNull: ${searchResult.answer == null}")
-
-            logToFile("TAVILY", "Raw response length: ${responseBody.length}")
-            logToFile("TAVILY", "Results count: ${searchResult.results?.size ?: 0}")
-            logToFile("TAVILY", "Answer present: ${searchResult.answer != null}")
-            logToFile("TAVILY", "First result title: ${searchResult.results?.firstOrNull()?.title ?: "NONE"}")
-            logToFile("TAVILY", "First result content: ${searchResult.results?.firstOrNull()?.content?.take(100) ?: "NONE"}")
-
-            val hasResults = !searchResult.results.isNullOrEmpty()
-            if (!hasResults) {
-                logToFile("TAVILY", "ERROR: Empty results returned!")
-                throw IOException("Tavily returned empty results - possible JSON parsing failure")
-            } else {
-                logToFile("TAVILY", "SUCCESS: Results found")
-            }
-
-            withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    context,
-                    "Tavily: ${searchResult.results?.size ?: 0} results",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            }
-
-            val contextBuilder = StringBuilder()
-            contextBuilder.append("WEB SEARCH RESULTS:\n")
-
-            // IGNORE Tavily's AI-generated answer - often outdated/hallucinated
-            // Let Gemma 4 E2B synthesize from raw search results instead
-
-            searchResult.results?.take(3)?.forEachIndexed { index, result ->
-                contextBuilder.append("[${index + 1}] ${result.title}\n")
-                contextBuilder.append("    ${result.content.take(200)}...\n\n")
-            }
-
-            Log.d(TAG, "Search complete, context length: ${contextBuilder.length}")
-            Pair(contextBuilder.toString().trim(), remainingCredits)
+            Pair(result, remainingCredits)
         }
     }
 }

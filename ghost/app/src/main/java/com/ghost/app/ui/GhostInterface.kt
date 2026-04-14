@@ -552,33 +552,31 @@ private fun RemainingCreditsIndicator(
     credits: Int?,
     isSearchPending: Boolean
 ) {
-    AnimatedVisibility(
-        visible = isNetEnabled && (credits != null || isSearchPending),
-        enter = expandVertically(animationSpec = spring(stiffness = 300f, dampingRatio = 0.8f)),
-        exit = shrinkVertically(animationSpec = spring(stiffness = 300f, dampingRatio = 0.8f))
-    ) {
-        Column {
-            Text(
-                text = when {
-                    isSearchPending -> "Searching..."
-                    credits == -1 -> "Remaining: unknown"
-                    credits != null -> "Remaining: $credits"
-                    else -> ""
-                },
-                fontFamily = VT323,
-                fontSize = 10.sp,
-                color = when {
-                    credits == null -> PhosphorDim
-                    credits == -1 -> PhosphorDim.copy(alpha = 0.7f)
-                    credits > 500 -> PhosphorGreen
-                    credits > 200 -> Color(0xFFFFAA00)
-                    else -> Color(0xFFFF4444)
-                },
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-            )
+    if (!isNetEnabled) return
 
-            Spacer(modifier = Modifier.height(4.dp))
-        }
+    val displayText = when {
+        isSearchPending -> "Searching..."
+        credits == null -> ""
+        credits == -1 -> "Credits: --"
+        credits <= 50 -> "LOW: $credits"
+        else -> "Credits: $credits"
+    }
+
+    if (displayText.isNotEmpty()) {
+        Text(
+            text = displayText,
+            fontFamily = VT323,
+            fontSize = 14.sp, // Was 10.sp
+            color = when {
+                credits == -1 -> PhosphorDim.copy(alpha = 0.5f)
+                credits <= 50 -> Color(0xFFFF4444)
+                credits <= 200 -> Color(0xFFFFAA00)
+                else -> PhosphorGreen
+            },
+            modifier = Modifier
+                .background(GunmetalSurface.copy(alpha = 0.7f))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        )
     }
 }
 

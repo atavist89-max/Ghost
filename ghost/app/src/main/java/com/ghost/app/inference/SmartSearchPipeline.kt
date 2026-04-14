@@ -2,11 +2,12 @@ package com.ghost.app.inference
 
 import android.content.Context
 import android.util.Log
-import com.google.ai.edge.litertlm.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Hybrid web search pipeline combining:
@@ -22,84 +23,63 @@ class SmartSearchPipeline(
 ) {
 
     private val tavilyService = TavilySearchService(context)
-    private var creditsUsed = 0
+    private var creditsUsedThisQuery = 0
 
-    companion object {
-        private const val TAG = "SmartSearch"
-    }
+    // Plain text enforcement suffix for all prompts
+    private val plainTextEnforcement = "CRITICAL: Use only plain text with no formatting. " +
+        "Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. " +
+        "Write as if outputting to a 1970s monochrome terminal."
 
     /**
-     * Execute smart search pipeline and return verified answer.
+     * Execute smart search pipeline and return verified answer with remaining credits.
      */
-    suspend fun search(query: String): Pair<String, Int?> = withContext(Dispatchers.IO) {
-        creditsUsed = 0
+    suspend fun search(query: String): Pair<String, Int> = withContext(Dispatchers.IO) {
+        creditsUsedThisQuery = 0
+        logToFile("PIPELINE", "Starting search: $query")
 
-        // STAGE 1: Initial search + relevance scoring
-        val initialResults = tavilySearchRaw(query)
+        // Stage 1: Initial search + relevance scoring
+        val initialResults = tavilySearch(query)
         val scores = scoreResults(query, initialResults.results)
 
         // Conditional re-query if all scores < 5
         val finalResults = if (scores.isEmpty() || scores.all { it < 5 }) {
             val improvedQuery = "$query ${extractKeyTerms(initialResults.results)}"
-            tavilySearchRaw(improvedQuery)
+            tavilySearch(improvedQuery)
         } else {
             initialResults
         }
 
-        // STAGE 2: Compress context (top 2 relevant results only)
+        // Stage 2: Compress context (top 2 relevant results only)
         val compressed = compressContext(query, finalResults.results, scores)
 
-        // STAGE 3: Draft + verify
+        // Stage 3: Draft + verify
         val draft = generateDraft(query, compressed)
         val isVerified = verifyDraft(draft, compressed)
 
-        Log.i(TAG, "Credits used: $creditsUsed")
+        // Track credits client-side
+        tavilyService.deductCredits(creditsUsedThisQuery)
+        val remaining = tavilyService.getCreditsForDisplay()
+
+        logToFile("PIPELINE", "Search complete. Credits used: $creditsUsedThisQuery, remaining: $remaining")
 
         val answer = if (isVerified) draft else "[Unverified] $draft"
-        Pair(answer, null) // Credits tracking handled separately
+        Pair(answer, remaining)
     }
 
-    private suspend fun tavilySearchRaw(query: String): TavilySearchService.SearchResponse {
-        creditsUsed++
-        return withContext(Dispatchers.IO) {
-            val requestBody = TavilySearchService.SearchRequest(
-                apiKey = tavilyService.apiKey,
-                query = query,
-                searchDepth = "basic",
-                maxResults = 3,
-                includeAnswer = true
-            )
-
-            val gson = com.google.gson.Gson()
-            val json = gson.toJson(requestBody)
-            val body = json.toRequestBody("application/json".toMediaType())
-
-            val request = okhttp3.Request.Builder()
-                .url("https://api.tavily.com/search")
-                .post(body)
-                .build()
-
-            val client = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw java.io.IOException("Tavily API error: ${response.code}")
-                }
-
-                val responseBody = response.body?.string()
-                    ?: throw java.io.IOException("Empty response")
-
-                gson.fromJson(responseBody, TavilySearchService.SearchResponse::class.java)
-            }
-        }
+    private suspend fun tavilySearch(query: String): TavilySearchService.SearchResponse {
+        creditsUsedThisQuery++
+        val (response, _) = tavilyService.searchRaw(query)
+        return response
     }
 
     private suspend fun scoreResults(query: String, results: List<TavilySearchService.SearchResult>?): List<Int> {
         return results?.map { result ->
-            val prompt = "Rate 0-10: Does this text answer \"$query\"?\nText: ${result.content.take(300)}\nReply number only:"
+            val prompt = """
+                Rate 0-10: Does this text answer "$query"?
+                Text: ${result.content.take(300)}
+                $plainTextEnforcement
+                Reply with only a number 0-10:
+            """.trimIndent()
             val response = quickLocalInference(prompt)
             response.filter { it.isDigit() }.toIntOrNull() ?: 0
         } ?: emptyList()
@@ -119,17 +99,38 @@ class SmartSearchPipeline(
             ?.map { it.first }
             ?: return "No relevant sources."
 
-        val prompt = "Extract only sentences answering \"$query\":\n${relevant.mapIndexed { i, r -> "[${i+1}] ${r.content.take(400)}" }.joinToString("\n")}\nRelevant facts:"
+        val prompt = """
+            Extract only sentences from these texts that help answer: "$query"
+
+            ${relevant.mapIndexed { i, r -> "[${i+1}] ${r.content.take(400)}" }.joinToString("\n")}
+
+            $plainTextEnforcement
+
+            Relevant facts only:
+        """.trimIndent()
         return quickLocalInference(prompt)
     }
 
     private suspend fun generateDraft(query: String, context: String): String {
-        val prompt = "Based on: $context\nAnswer: $query"
+        val prompt = """
+            Based on these facts: $context
+
+            Answer concisely: $query
+
+            $plainTextEnforcement
+        """.trimIndent()
         return quickLocalInference(prompt)
     }
 
     private suspend fun verifyDraft(draft: String, context: String): Boolean {
-        val prompt = "Facts: $context\nClaim: $draft\nIs claim fully supported? Reply VERIFIED or UNSUPPORTED:"
+        val prompt = """
+            Facts: $context
+            Claim: $draft
+
+            Is the claim fully supported by the facts?
+            $plainTextEnforcement
+            Reply VERIFIED or UNSUPPORTED:
+        """.trimIndent()
         return quickLocalInference(prompt).contains("VERIFIED")
     }
 
@@ -137,8 +138,17 @@ class SmartSearchPipeline(
         return try {
             inferenceEngine.quickInfer(prompt)
         } catch (e: Exception) {
-            Log.w(TAG, "quickLocalInference failed: ${e.message}")
+            Log.w("SmartSearch", "quickLocalInference failed: ${e.message}")
             "Error"
         }
+    }
+
+    private fun logToFile(tag: String, message: String) {
+        try {
+            val logFile = File("/storage/emulated/0/Download/GhostModels/debug_log.txt")
+            logFile.parentFile?.mkdirs()
+            val timestamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+            logFile.appendText("[$timestamp] [$tag] $message\n")
+        } catch (e: Exception) { }
     }
 }
