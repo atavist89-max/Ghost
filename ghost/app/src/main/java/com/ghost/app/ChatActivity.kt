@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.inference.PiperTTS
-import com.ghost.app.inference.TavilySearchService
+
 import com.ghost.app.ui.GhostInterface
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
@@ -77,7 +77,6 @@ class ChatActivity : ComponentActivity() {
     private val _isEngineReady = mutableStateOf(false)
     private val _isVisualMode = mutableStateOf(false)
     private val _isNetEnabled = mutableStateOf(false)
-    private val _webSearchCredits = mutableStateOf<Int?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,10 +105,6 @@ class ChatActivity : ComponentActivity() {
             Log.i(TAG, "Piper TTS initialized: $initialized, sampleRate=${getSampleRate()}")
         }
 
-        val tavilyConfigured = TavilySearchService(applicationContext).isConfigured()
-        Log.e("TAVILY_DEBUG", "=== Startup check: Tavily configured = $tavilyConfigured ===")
-        Toast.makeText(this, "Tavily: $tavilyConfigured", Toast.LENGTH_LONG).show()
-
         // Set up Compose UI with transparent background and keyboard handling
         setContent {
             GhostTheme {
@@ -122,12 +117,8 @@ class ChatActivity : ComponentActivity() {
                     isVisualMode = _isVisualMode.value,
                     onVisualModeChange = { _isVisualMode.value = it },
                     isNetEnabled = _isNetEnabled.value,
-                    onNetToggle = {
-                        _isNetEnabled.value = it
-                        if (!it) _webSearchCredits.value = null
-                    },
-                    webSearchCredits = _webSearchCredits.value,
-                    isNetConfigured = tavilyConfigured,
+                    onNetToggle = { _isNetEnabled.value = it },
+                    isNetConfigured = true,
                     onSendQuery = { query ->
                         handleQuery(
                             query = query,
@@ -208,11 +199,6 @@ class ChatActivity : ComponentActivity() {
                     DebugLogger.e(TAG, "Inference error: $error")
                 }
             },
-            onWebCreditsUpdate = { credits ->
-                mainScope.launch {
-                    _webSearchCredits.value = credits
-                }
-            },
             onWebSearchError = { error ->
                 mainScope.launch {
                     _responseText.value = error
@@ -265,8 +251,7 @@ private fun ChatScreenPiP(
     onVisualModeChange: (Boolean) -> Unit,
     isNetEnabled: Boolean,
     onNetToggle: (Boolean) -> Unit,
-    webSearchCredits: Int?,
-    isNetConfigured: Boolean,
+    isNetConfigured: Boolean = true,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -338,7 +323,6 @@ private fun ChatScreenPiP(
                     onVisualModeChange = onVisualModeChange,
                     isNetEnabled = isNetEnabled,
                     onNetToggle = onNetToggle,
-                    webSearchCredits = webSearchCredits,
                     isNetConfigured = isNetConfigured,
                     onSendQuery = onSendQuery,
                     onClose = onClose

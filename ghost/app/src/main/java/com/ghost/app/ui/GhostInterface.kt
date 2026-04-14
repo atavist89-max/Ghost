@@ -39,7 +39,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.ghost.app.BuildConfig
 import com.ghost.app.inference.PiperTTS
 import com.ghost.app.ui.theme.VT323
-import android.widget.Toast
 
 // Phosphor Green Cyberpunk Colors
 private val PhosphorGreen = Color(0xFF39FF14)
@@ -79,8 +78,7 @@ fun GhostInterface(
     onVisualModeChange: (Boolean) -> Unit = {},
     isNetEnabled: Boolean = false,
     onNetToggle: (Boolean) -> Unit = {},
-    webSearchCredits: Int? = null,
-    isNetConfigured: Boolean = false,
+    isNetConfigured: Boolean = true,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
@@ -179,12 +177,6 @@ fun GhostInterface(
                 isNetConfigured = isNetConfigured,
                 onClose = onClose,
                 onDebugClick = onDebugClick
-            )
-
-            RemainingCreditsIndicator(
-                isNetEnabled = isNetEnabled,
-                credits = webSearchCredits,
-                isSearchPending = isGenerating && isNetEnabled && webSearchCredits == null
             )
 
             // Phosphor divider line
@@ -517,15 +509,7 @@ private fun GlobeToggle(
             .clickable {
                 Log.d("GlobeToggle", "Tapped. isConfigured=$isConfigured, isNetEnabled=$isNetEnabled")
 
-                if (!isConfigured && !isNetEnabled) {
-                    Toast.makeText(
-                        context,
-                        "No Tavily key found in GhostModels/",
-                        Toast.LENGTH_LONG
-                    ).show()
-                } else {
-                    onToggle(!isNetEnabled)
-                }
+                onToggle(!isNetEnabled)
             },
         contentAlignment = Alignment.Center
     ) {
@@ -543,41 +527,6 @@ private fun GlobeToggle(
                 modifier = Modifier.offset(x = 1.dp, y = (-1).dp)
             )
         }
-    }
-}
-
-@Composable
-private fun RemainingCreditsIndicator(
-    isNetEnabled: Boolean,
-    credits: Int?,
-    isSearchPending: Boolean
-) {
-    if (!isNetEnabled) return
-
-    val displayText = when {
-        isSearchPending -> "Searching..."
-        credits == null -> ""
-        credits == -1 -> "Credits: --"
-        credits <= 50 -> "LOW: $credits"
-        else -> "Credits: $credits"
-    }
-
-    if (displayText.isNotEmpty()) {
-        Text(
-            text = displayText,
-            fontFamily = VT323,
-            fontSize = 14.sp, // Was 10.sp
-            color = when {
-                credits == -1 -> PhosphorDim.copy(alpha = 0.5f)
-                credits == null -> PhosphorDim
-                credits <= 50 -> Color(0xFFFF4444)
-                credits <= 200 -> Color(0xFFFFAA00)
-                else -> PhosphorGreen
-            },
-            modifier = Modifier
-                .background(GunmetalSurface.copy(alpha = 0.7f))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        )
     }
 }
 

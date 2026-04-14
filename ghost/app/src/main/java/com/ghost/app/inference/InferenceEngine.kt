@@ -61,7 +61,7 @@ class InferenceEngine(private val context: Context) {
     private val mainScope = CoroutineScope(Dispatchers.Main)
     private val inferenceScope = CoroutineScope(Dispatchers.Default)
 
-    private val tavilyService = TavilySearchService(context)
+    private val wikipediaService = WikipediaSearchService(context)
 
     /**
      * Initialize the inference engine with the model.
@@ -171,11 +171,11 @@ class InferenceEngine(private val context: Context) {
      * @param bitmap The screenshot to analyze (only used in visual mode)
      * @param query User's question
      * @param useVisualMode Whether to use visual mode with screenshot
-     * @param useWebSearch Whether to fetch Tavily search results as context
+     * @param useWebSearch Whether to fetch Wikipedia search results as context
      * @param onToken Callback for each token as it's generated
      * @param onComplete Callback when generation is complete
      * @param onError Callback if an error occurs
-     * @param onWebCreditsUpdate Callback when Tavily credits are known
+     * @param onWebCreditsUpdate Callback when Wikipedia search completes (unused, kept for compatibility)
      */
     fun analyze(
         bitmap: Bitmap?,
@@ -195,36 +195,24 @@ class InferenceEngine(private val context: Context) {
 
         inferenceScope.launch {
             try {
-                // If web search enabled, run smart pipeline first
-                if (useWebSearch && tavilyService.isConfigured()) {
+                var articleTitle: String? = null
+                var articleContent: String? = null
+
+                if (useWebSearch) {
                     try {
-                        Log.i(TAG, "Running SmartSearchPipeline for query: $query")
-                        val pipeline = SmartSearchPipeline(context, this@InferenceEngine)
-                        val (answer, remainingCredits) = pipeline.search(query)
-                        onWebCreditsUpdate?.invoke(remainingCredits)
-
-                        // Stream answer tokens to UI
-                        val tokens = answer.split(" ")
-                        for (token in tokens) {
-                            mainScope.launch { onToken("$token ") }
-                            kotlinx.coroutines.delay(30)
-                        }
-
-                        withContext(Dispatchers.Main) { onComplete() }
-                        return@launch // Skip normal LLM path - pipeline already produced answer
+                        Log.i(TAG, "Fetching Wikipedia article for query: $query")
+                        val (title, content) = wikipediaService.search(query)
+                        articleTitle = title
+                        articleContent = content
+                        onWebCreditsUpdate?.invoke(-1) // No credit tracking for Wikipedia
+                        Log.i(TAG, "Wikipedia article ready: '$title' (${content.length} chars)")
                     } catch (e: Exception) {
-                        Log.e(TAG, "SmartSearchPipeline failed: ${e.message}", e)
+                        Log.e(TAG, "Wikipedia search failed: ${e.message}", e)
                         val errorMsg = "WEB SEARCH ERROR: ${e.message ?: "Unknown error"}"
                         withContext(Dispatchers.Main) {
                             onWebSearchError?.invoke(errorMsg)
                         }
-                        // Fall through to normal local LLM with error noted
-                    }
-                } else if (useWebSearch) {
-                    val errorMsg = "[Web search unavailable: API key not configured. Create /storage/emulated/0/Download/GhostModels/tavily_key.txt]"
-                    Log.w(TAG, "Web search requested but API key not configured")
-                    withContext(Dispatchers.Main) {
-                        onWebSearchError?.invoke(errorMsg)
+                        // Fall through to normal local LLM
                     }
                 }
 
@@ -232,16 +220,30 @@ class InferenceEngine(private val context: Context) {
                 val conversation = engineInstance.createConversation()
 
                 try {
-                    val personaPrompt = if (useVisualMode && bitmap != null) {
+                    val basePersona = if (useVisualMode && bitmap != null) {
                         "You are a robotic visual analysis assistant. Provide brief, factual, and logically structured responses devoid of emotion or elaboration. Analyze the screenshot and report only relevant technical findings with machine-like precision. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     } else {
                         "You are a robotic computer assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     }
 
-                    val fullQuery = "USER QUERY: $query"
+                    val finalPrompt = if (articleTitle != null && articleContent != null) {
+                        buildString {
+                            append(basePersona)
+                            append("\nWikipedia Article Title: ")
+                            append(articleTitle)
+                            append("\nWikipedia Article Content: ")
+                            append(articleContent)
+                            append("\n\nuser_query: ")
+                            append(query)
+                            append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. Start your response with 'Based on ")
+                            append(articleTitle)
+                            append("' followed by exactly 5 concise sentences. Do not include any other text.")
+                        }
+                    } else {
+                        "$basePersona USER QUERY: $query"
+                    }
 
-                    val finalPrompt = "$personaPrompt $fullQuery"
-                    Log.e(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length}")
+                    Log.i(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length}")
 
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)

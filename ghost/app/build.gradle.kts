@@ -97,7 +97,7 @@ dependencies {
     // Sherpa-ONNX for Piper TTS inference
     implementation("com.github.k2-fsa:sherpa-onnx:v1.12.38")
 
-    // Web Search (Tavily)
+    // Web Search (Wikipedia via MediaWiki API)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
 
