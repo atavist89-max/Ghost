@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -126,16 +127,15 @@ class ChatActivity : ComponentActivity() {
                     onNetToggle = { _isNetEnabled.value = it },
                     isNetConfigured = true,
                     onSendQuery = { query ->
-                        // Block retry if previous web search failed
                         if (_isNetEnabled.value && _responseText.value.contains("WEB SEARCH ERROR")) {
                             _responseText.value = "WEB SEARCH ERROR: Previous Wikipedia search failed.\n\nTurn OFF web toggle to use local LLM."
-                            return@onSendQuery
+                        } else {
+                            handleQuery(
+                                query = query,
+                                useVisualMode = _isVisualMode.value,
+                                useNetSearch = _isNetEnabled.value
+                            )
                         }
-                        handleQuery(
-                            query = query,
-                            useVisualMode = _isVisualMode.value,
-                            useNetSearch = _isNetEnabled.value
-                        )
                     },
                     onClose = { finishAndRemoveTask() }
                 )
