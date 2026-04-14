@@ -78,6 +78,7 @@ fun GhostInterface(
     isNetEnabled: Boolean = false,
     onNetToggle: (Boolean) -> Unit = {},
     webSearchCredits: Int? = null,
+    isNetConfigured: Boolean = false,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
@@ -173,6 +174,7 @@ fun GhostInterface(
                 },
                 isNetEnabled = isNetEnabled,
                 onNetToggle = onNetToggle,
+                isNetConfigured = isNetConfigured,
                 onClose = onClose,
                 onDebugClick = onDebugClick
             )
@@ -240,6 +242,7 @@ private fun PipBoyHeader(
     onVisualModeChange: (Boolean) -> Unit,
     isNetEnabled: Boolean,
     onNetToggle: (Boolean) -> Unit,
+    isNetConfigured: Boolean,
     onClose: () -> Unit,
     onDebugClick: () -> Unit
 ) {
@@ -276,7 +279,7 @@ private fun PipBoyHeader(
         GlobeToggle(
             isNetEnabled = isNetEnabled,
             onToggle = onNetToggle,
-            isConfigured = true
+            isConfigured = isNetConfigured
         )
 
         Spacer(modifier = Modifier.weight(1f))
@@ -546,6 +549,7 @@ private fun RemainingCreditsIndicator(
             Text(
                 text = when {
                     isSearchPending -> "Searching..."
+                    credits == -1 -> "Remaining: unknown"
                     credits != null -> "Remaining: $credits"
                     else -> ""
                 },
@@ -553,6 +557,7 @@ private fun RemainingCreditsIndicator(
                 fontSize = 10.sp,
                 color = when {
                     credits == null -> PhosphorDim
+                    credits == -1 -> PhosphorDim.copy(alpha = 0.7f)
                     credits > 500 -> PhosphorGreen
                     credits > 200 -> Color(0xFFFFAA00)
                     else -> Color(0xFFFF4444)

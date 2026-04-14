@@ -194,11 +194,19 @@ class InferenceEngine(private val context: Context) {
                         webContext = context
                         remainingCredits = credits
                         Log.i(TAG, "Tavily search complete. Remaining credits: $credits")
-                        remainingCredits?.let { onWebCreditsUpdate?.invoke(it) }
+                        if (remainingCredits != null) {
+                            onWebCreditsUpdate?.invoke(remainingCredits)
+                        } else {
+                            Log.w(TAG, "X-RateLimit-Remaining header missing from Tavily response")
+                            onWebCreditsUpdate?.invoke(-1) // Sentinel for unknown
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Web search failed, falling back to local: ${e.message}")
                         webContext = "[Web search unavailable: ${e.message}]"
                     }
+                } else if (useWebSearch) {
+                    webContext = "[Web search unavailable: API key not configured. Add TAVILY_API_KEY to local.properties]"
+                    Log.w(TAG, "Web search requested but API key not configured")
                 }
 
                 val engineInstance = engine ?: throw IllegalStateException("Engine is null")

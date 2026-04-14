@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.inference.PiperTTS
+import com.ghost.app.inference.TavilySearchService
 import com.ghost.app.ui.GhostInterface
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
@@ -104,6 +105,9 @@ class ChatActivity : ComponentActivity() {
             Log.i(TAG, "Piper TTS initialized: $initialized, sampleRate=${getSampleRate()}")
         }
 
+        val tavilyConfigured = TavilySearchService().isConfigured()
+        Log.d(TAG, "Tavily configured: $tavilyConfigured")
+
         // Set up Compose UI with transparent background and keyboard handling
         setContent {
             GhostTheme {
@@ -121,6 +125,7 @@ class ChatActivity : ComponentActivity() {
                         if (!it) _webSearchCredits.value = null
                     },
                     webSearchCredits = _webSearchCredits.value,
+                    isNetConfigured = tavilyConfigured,
                     onSendQuery = { query ->
                         handleQuery(
                             query = query,
@@ -253,6 +258,7 @@ private fun ChatScreenPiP(
     isNetEnabled: Boolean,
     onNetToggle: (Boolean) -> Unit,
     webSearchCredits: Int?,
+    isNetConfigured: Boolean,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -325,6 +331,7 @@ private fun ChatScreenPiP(
                     isNetEnabled = isNetEnabled,
                     onNetToggle = onNetToggle,
                     webSearchCredits = webSearchCredits,
+                    isNetConfigured = isNetConfigured,
                     onSendQuery = onSendQuery,
                     onClose = onClose
                 )
