@@ -224,29 +224,39 @@ class InferenceEngine(private val context: Context) {
                         "You are a robotic computer assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     }
 
+                    val hasRealContent = webContext.length > "WEB SEARCH RESULTS:\n".length + 10
+
                     val fullQuery = buildString {
-                        if (webContext.isNotEmpty() && !webContext.startsWith("WEB SEARCH ERROR")) {
+                        if (hasRealContent && !webContext.startsWith("WEB SEARCH ERROR")) {
                             append("The following WEB SEARCH RESULTS contain accurate, current information as of today. ")
                             append("You MUST use these results to answer the query, ignoring your training data if it conflicts. ")
                             append("Base your answer SOLELY on the web search results provided:\n\n")
                             append("$webContext\n\n")
                             append("Based ONLY on the web search results above, answer the following query. ")
                             append("Do not use your internal knowledge. ")
-                        } else if (webContext.startsWith("WEB SEARCH ERROR")) {
-                            append("$webContext\n\n")
+                        } else if (webContext.startsWith("WEB SEARCH ERROR") || !hasRealContent) {
+                            append("[Web search returned no results, using local knowledge] \n\n")
+                            if (webContext.startsWith("WEB SEARCH ERROR")) {
+                                append("$webContext\n\n")
+                            }
                         }
                         append("USER QUERY: $query")
                     }
 
+                    val finalPrompt = "$personaPrompt $fullQuery"
+                    Log.e(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length}")
+                    Log.e(TAG, "WEB CONTEXT IN PROMPT: ${fullQuery.contains("WEB SEARCH RESULTS")}")
+                    Log.e(TAG, "WEB CONTEXT PREVIEW: ${webContext.take(200)}")
+
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)
                         if (imagePath != null) {
-                            Message.of("$personaPrompt $fullQuery")
+                            Message.of(finalPrompt)
                         } else {
-                            Message.of("$personaPrompt $fullQuery (screenshot failed)")
+                            Message.of("$finalPrompt (screenshot failed)")
                         }
                     } else {
-                        Message.of("$personaPrompt $fullQuery")
+                        Message.of(finalPrompt)
                     }
 
                     val sendingMsg = "Message object created, sending to model..."

@@ -157,6 +157,16 @@ class TavilySearchService(private val context: Context) {
 
             val searchResult = gson.fromJson(responseBody, SearchResponse::class.java)
 
+            Log.e(TAG, "RAW RESPONSE: $responseBody")
+            Log.e(TAG, "Parsed results isNull: ${searchResult.results == null}")
+            Log.e(TAG, "Parsed results size: ${searchResult.results?.size ?: 0}")
+            Log.e(TAG, "Parsed answer isNull: ${searchResult.answer == null}")
+
+            val hasResults = !searchResult.results.isNullOrEmpty() || !searchResult.answer.isNullOrEmpty()
+            if (!hasResults) {
+                throw IOException("Tavily returned empty results - possible JSON parsing failure")
+            }
+
             val contextBuilder = StringBuilder()
             contextBuilder.append("WEB SEARCH RESULTS:\n")
 
