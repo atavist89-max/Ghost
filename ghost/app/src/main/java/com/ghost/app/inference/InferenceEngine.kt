@@ -210,7 +210,7 @@ class InferenceEngine(private val context: Context) {
                         }
                     }
                 } else if (useWebSearch) {
-                    webContext = "[Web search unavailable: API key not configured. Add TAVILY_API_KEY to local.properties]"
+                    webContext = "[Web search unavailable: API key not configured. Create /storage/emulated/0/Download/GhostModels/tavily_key.txt]"
                     Log.w(TAG, "Web search requested but API key not configured")
                 }
 

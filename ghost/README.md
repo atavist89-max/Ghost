@@ -200,7 +200,7 @@ Private use only. Not for redistribution.
 - Globe toggle 🌐 in header for opt-in web search (default OFF)
 - Credits indicator with color-coded remaining searches
 - Search results injected into local Gemma prompt (Search → Local LLM architecture)
-- API key loaded from `local.properties` into `BuildConfig`
+- API key read from `/storage/emulated/0/Download/GhostModels/tavily_key.txt` (no rebuild needed to rotate keys)
 
 ### v1.2 (2026-04-13)
 - Added Visual/Text mode toggle in terminal header (`TXT` / `VIS`)

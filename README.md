@@ -274,10 +274,11 @@ Ghost can enhance local LLM responses with real-time web search via **Tavily API
 
 1. Sign up at https://app.tavily.com (no credit card required)
 2. Get API key (starts with `tvly-...`)
-3. Add to `ghost/local.properties`:
-   ```properties
-   TAVILY_API_KEY=your_key_here
+3. Create a file on your device at:
    ```
+   /storage/emulated/0/Download/GhostModels/tavily_key.txt
+   ```
+   Paste your API key into this file (no quotes, no extra lines).
 4. Build and install
 
 ### Usage
