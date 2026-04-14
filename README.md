@@ -1,10 +1,5 @@
 # Ghost v1.0
 
-> ⚠️ **PLACEHOLDER IMPLEMENTATION** ⚠️  
-> This is a placeholder UI implementation waiting for the **LiteRT-LM API migration** from `litert-support-api:0.10.0` to `litertlm:0.11.0` for multimodal vision support. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual on-device LLM inference with image input. The production API integration is pending Maven availability of `litertlm` with vision capabilities.
-
----
-
 ## What is Ghost?
 
 Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy S25+ (Android 16 / One UI 8.0). Triggered by double-tapping the Side Key, it captures your screen and provides instant AI-powered insights through a floating Pip-Boy-style Picture-in-Picture window—completely offline.
@@ -16,7 +11,8 @@ Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy
 - **HAL 9000 Voice Synthesis**: Piper TTS integration with a morphing Play/HAL button that pulses in HAL's iconic staccato rhythm (short-short-long)
 - **Visual / Text Mode Toggle**: Switch between vision (screenshot + text) and text-only assistant modes. **TEXT mode is default** while LiteRT-LM multimodal support is pending.
 - **Optional Web Search**: Tavily API integration with opt-in globe toggle (1,000 free credits/month)
-- **Zero Network Access**: All processing happens locally on your device's NPU
+- **SmartSearch Pipeline**: 3-stage hybrid search — relevance scoring, context compression, and adversarial fact-checking using local Gemma 4 E2B
+- **Zero Network Access**: All processing happens locally on your device's NPU (internet only used for optional Tavily)
 - **Zero Data Retention**: Screenshots exist only in memory, never stored
 - **Zero Background Drain**: No services running when closed—trigger only when needed
 
@@ -99,8 +95,10 @@ ghost/
 │   │   ├── GhostWindowManager.kt # Window management
 │   │   └── theme/                # Terminal colors & VT323 typography
 │   └── inference/
-│       ├── InferenceEngine.kt    # LiteRT-LM integration (pending API)
-│       └── PiperTTS.kt           # HAL 9000 voice synthesis (ONNX placeholder)
+│       ├── InferenceEngine.kt    # LiteRT-LM integration
+│       ├── SmartSearchPipeline.kt # 3-stage Tavily + local LLM pipeline
+│       ├── TavilySearchService.kt # Tavily API client
+│       └── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
 ├── app/src/main/res/font/
 │   ├── vt323_regular.ttf         # VT323 terminal font
 │   └── xanti_typewriter_regular.ttf  # Legacy typewriter font
@@ -119,31 +117,11 @@ ghost/
 | **Font** | VT323 terminal font (24sp body) |
 | **Colors** | Phosphor green `#39FF14` on gunmetal `#0A0F0A` |
 | **Animation** | Spring physics (stiffness 300, damping 0.8) |
-| **LLM** | Gemma 4 E2B via LiteRT-LM (pending API migration) |
+| **LLM** | Gemma 4 E2B via LiteRT-LM `0.10.0` |
 
 ---
 
-## Placeholder Notice
-
-This build demonstrates the complete visual and interaction design but uses placeholder responses. The production version is waiting for:
-
-### Pending API Migration
-- [ ] **LiteRT-LM Maven availability** — `litertlm:0.11.0` with multimodal vision
-- [ ] **API migration** — Replace `litert-support-api:0.10.0` imports with `litertlm`
-- [ ] **Class migration** — `LlmInference` → `Engine` and `Conversation`
-- [ ] **Method migration** — `generateAsync(prompt)` → `sendMessage(Contents.of(Content.ImageFile(tempFile), Content.Text(query)))`
-- [ ] **Bitmap handling** — Save screenshot to temp file for vision model input
-- [ ] **Gemma 4 E2B vision model** — Multimodal understanding of screenshots
-- [ ] **Hexagon NPU acceleration** — Hardware-accelerated inference
-- [x] **Sherpa-ONNX Android** — Piper TTS inference for HAL 9000 voice (requires desktop model conversion)
-- [ ] **ONNX Runtime Mobile** — Direct Piper TTS inference without conversion
-
-### Production Ready
-The UI, animations, Iris mascot behaviors, Pip-Boy terminal mechanics, PiP window handling, AccessibilityService, and model path handling are complete and will remain unchanged.
-
----
-
-## Implementation Instructions (When API is Released)
+## Implementation Instructions
 
 When `litertlm:0.11.0` (or latest available) is released on Maven, follow these steps:
 
@@ -236,6 +214,7 @@ Delete temp file after inference:
 - PiP logic (`GhostWindowManager.kt`)
 - AccessibilityService (`GhostAccessibilityService.kt`)
 - Model path handling (`GhostPaths.kt`)
+- SmartSearchPipeline (`SmartSearchPipeline.kt`)
 
 ---
 
@@ -290,7 +269,21 @@ Ghost can enhance local LLM responses with real-time web search via **Tavily API
 
 ### Architecture
 
-Tavily search results are fetched first, then injected as context into the local Gemma LLM prompt. The LLM synthesizes the web results with its local knowledge. This keeps the HAL 9000 voice and local processing while adding current information.
+Ghost uses a **SmartSearchPipeline** when web search is enabled:
+
+1. **Initial Tavily Search** — Fetches raw web results (1 credit)
+2. **Relevance Scoring** — Local Gemma 4 E2B scores each result 0-10
+3. **Conditional Re-query** — If all scores < 5, performs a refined search (+1 credit)
+4. **Context Compression** — Local Gemma extracts only the top-2 most relevant facts
+5. **Draft + Verify** — Local Gemma drafts an answer, then another local call verifies it (`VERIFIED` / `UNSUPPORTED`)
+6. **Result** — Verified answer is streamed back. If verification fails, answer is prefixed with `[Unverified]`
+
+**Why this is better:**
+- Tavily's AI-generated `answer` field is **ignored** — it was found to contain outdated/hallucinated info (e.g., saying Biden is president in 2026)
+- Only raw search snippets are used, scored, compressed, and verified by the local model
+- Screenshot stays local; only query text goes to Tavily
+
+**Privacy:** Only the text query leaves the device. All LLM inference, synthesis, and verification happens locally on the NPU/GPU.
 
 ---
 

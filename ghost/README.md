@@ -8,11 +8,11 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 
 ### Key Features
 
-- 🔒 **Zero Network Access**: No `INTERNET` permission; all inference is local
+- 🔒 **Privacy-First**: All LLM inference is local on Hexagon NPU/GPU
 - ⚡ **Hardware Accelerated**: Uses Hexagon NPU with GPU fallback
 - 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
 - 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
-- 🌐 **Optional Web Search**: Tavily API with opt-in globe toggle. Search results injected into local Gemma prompt
+- 🌐 **Optional Web Search**: Tavily API with opt-in globe toggle. Uses 3-stage SmartSearchPipeline (score, compress, verify)
 - 🔋 **Zero Background Drain**: No services, no notifications when closed
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
@@ -84,6 +84,7 @@ GhostActivity (Entry Point)
 ├── LiteRT-LM Inference Engine
 │   ├── Model Loader (/storage/emulated/0/Download/GhostModels/)
 │   ├── HexagonNpuDelegate (primary) / GpuDelegate (fallback)
+│   ├── SmartSearchPipeline (Tavily + local scoring/compression/verification)
 │   └── AsyncTokenGenerator (streaming responses)
 ├── WindowManager Overlay (TYPE_APPLICATION_OVERLAY)
 │   ├── 340dp×600dp PiP window
@@ -115,6 +116,8 @@ ghost/
 │   │   └── BitmapConverter.kt
 │   ├── inference/
 │   │   ├── InferenceEngine.kt
+│   │   ├── SmartSearchPipeline.kt # 3-stage Tavily + local LLM pipeline
+│   │   ├── TavilySearchService.kt # Tavily API client
 │   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
 │   │   ├── ModelValidator.kt
 │   │   └── ThermalMonitor.kt
@@ -153,7 +156,7 @@ ghost/
 | `MANAGE_EXTERNAL_STORAGE` | Read 2.5GB model file | Yes |
 | `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Screen capture on Android 16 | Yes |
 | `SYSTEM_ALERT_WINDOW` | Floating PiP window | Yes |
-| `INTERNET` | **NOT DECLARED** | N/A |
+| `INTERNET` | Optional Tavily web search API | No (offline mode works without it) |
 
 ## Troubleshooting
 
@@ -184,7 +187,7 @@ Device will automatically switch from NPU to GPU if it gets warm
 
 ## Safety & Privacy
 
-- **No data leaves the device**: No network permission declared
+- **No data leaves the device by default**: INTERNET permission is only used for optional Tavily web search. All LLM inference is local.
 - **No background activity**: App fully terminates when PiP is closed
 - **No persistent storage**: Screenshots are held in memory only
 - **No analytics/telemetry**: Zero external communication
@@ -194,6 +197,15 @@ Device will automatically switch from NPU to GPU if it gets warm
 Private use only. Not for redistribution.
 
 ## Version History
+
+### v1.4 (2026-04-13)
+- Added `SmartSearchPipeline` — 3-stage hybrid web search
+  - Stage 1: Tavily search + local Gemma relevance scoring (0-10)
+  - Stage 2: Context compression (top 2 results only)
+  - Stage 3: Draft answer + adversarial verification (`VERIFIED` / `[Unverified]`)
+- Removed Tavily AI-generated `answer` field from prompt (was returning stale data like "Biden")
+- Added file-based debug logging to `GhostModels/debug_log.txt`
+- Added ProGuard rules to protect Gson `@SerializedName` annotations in release builds
 
 ### v1.3 (2026-04-13)
 - Added Tavily web search integration (`TavilySearchService.kt`)
