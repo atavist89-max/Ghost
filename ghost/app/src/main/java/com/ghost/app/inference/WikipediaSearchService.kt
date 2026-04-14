@@ -6,7 +6,7 @@ import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
@@ -49,7 +49,7 @@ class WikipediaSearchService(private val context: Context) {
     }
 
     private fun performSearch(query: String): List<SearchResult> {
-        val url = HttpUrl.parse(API_ENDPOINT)?.newBuilder()
+        val url = API_ENDPOINT.toHttpUrlOrNull()?.newBuilder()
             ?.addQueryParameter("action", "query")
             ?.addQueryParameter("list", "search")
             ?.addQueryParameter("srsearch", query)
@@ -66,9 +66,9 @@ class WikipediaSearchService(private val context: Context) {
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw IllegalStateException("Wikipedia search HTTP ${response.code()}")
+                throw IllegalStateException("Wikipedia search HTTP ${response.code}")
             }
-            val body = response.body()?.string()
+            val body = response.body?.string()
                 ?: throw IllegalStateException("Empty Wikipedia search response")
 
             val result = gson.fromJson(body, SearchResponse::class.java)
@@ -78,7 +78,7 @@ class WikipediaSearchService(private val context: Context) {
 
     private fun fetchArticleContent(title: String): String? {
         val encodedTitle = URLEncoder.encode(title, "UTF-8")
-        val url = HttpUrl.parse(API_ENDPOINT)?.newBuilder()
+        val url = API_ENDPOINT.toHttpUrlOrNull()?.newBuilder()
             ?.addQueryParameter("action", "query")
             ?.addQueryParameter("prop", "extracts")
             ?.addQueryParameter("explaintext", "true")
@@ -96,7 +96,7 @@ class WikipediaSearchService(private val context: Context) {
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
-            val body = response.body()?.string() ?: return null
+            val body = response.body?.string() ?: return null
 
             val result = gson.fromJson(body, ExtractResponse::class.java)
             val page = result.query?.pages?.values?.firstOrNull() ?: return null
