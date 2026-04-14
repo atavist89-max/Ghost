@@ -2,7 +2,7 @@ name: Build Ghost APK
 
 on:
   push:
-    branches: [ main, develop, feature/pip-cyberpunk-ui, feature/tavily-web-search ]
+    branches: [ main, develop, feature/pip-cyberpunk-ui, feature/tavily-web-search, feature/tavily-debug-ui ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
