@@ -183,7 +183,7 @@ class TavilySearchService(private val context: Context) {
             logToFile("TAVILY", "First result title: ${searchResult.results?.firstOrNull()?.title ?: "NONE"}")
             logToFile("TAVILY", "First result content: ${searchResult.results?.firstOrNull()?.content?.take(100) ?: "NONE"}")
 
-            val hasResults = !searchResult.results.isNullOrEmpty() || !searchResult.answer.isNullOrEmpty()
+            val hasResults = !searchResult.results.isNullOrEmpty()
             if (!hasResults) {
                 logToFile("TAVILY", "ERROR: Empty results returned!")
                 throw IOException("Tavily returned empty results - possible JSON parsing failure")
@@ -202,9 +202,8 @@ class TavilySearchService(private val context: Context) {
             val contextBuilder = StringBuilder()
             contextBuilder.append("WEB SEARCH RESULTS:\n")
 
-            searchResult.answer?.let {
-                contextBuilder.append("Summary: $it\n\n")
-            }
+            // IGNORE Tavily's AI-generated answer - often outdated/hallucinated
+            // Let Gemma 4 E2B synthesize from raw search results instead
 
             searchResult.results?.take(3)?.forEachIndexed { index, result ->
                 contextBuilder.append("[${index + 1}] ${result.title}\n")
