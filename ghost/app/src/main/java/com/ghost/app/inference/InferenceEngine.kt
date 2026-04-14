@@ -51,6 +51,8 @@ class InferenceEngine(private val context: Context) {
     private val mainScope = CoroutineScope(Dispatchers.Main)
     private val inferenceScope = CoroutineScope(Dispatchers.Default)
 
+    private val tavilyService = TavilySearchService()
+
     /**
      * Initialize the inference engine with the model.
      * For vision models, GPU backend is required for image processing.
@@ -159,17 +161,21 @@ class InferenceEngine(private val context: Context) {
      * @param bitmap The screenshot to analyze (only used in visual mode)
      * @param query User's question
      * @param useVisualMode Whether to use visual mode with screenshot
+     * @param useWebSearch Whether to fetch Tavily search results as context
      * @param onToken Callback for each token as it's generated
      * @param onComplete Callback when generation is complete
      * @param onError Callback if an error occurs
+     * @param onWebCreditsUpdate Callback when Tavily credits are known
      */
     fun analyze(
         bitmap: Bitmap?,
         query: String,
         useVisualMode: Boolean = false,
+        useWebSearch: Boolean = false,
         onToken: (String) -> Unit,
         onComplete: () -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onWebCreditsUpdate: ((Int) -> Unit)? = null
     ) {
         if (!isInitialized.get() || isClosed.get()) {
             onError("Inference engine not initialized")
@@ -178,25 +184,49 @@ class InferenceEngine(private val context: Context) {
 
         inferenceScope.launch {
             try {
+                // Fetch web search results if enabled (before LLM inference)
+                var webContext = ""
+                var remainingCredits: Int? = null
+
+                if (useWebSearch && tavilyService.isConfigured()) {
+                    try {
+                        val (context, credits) = tavilyService.search(query)
+                        webContext = context
+                        remainingCredits = credits
+                        Log.i(TAG, "Tavily search complete. Remaining credits: $credits")
+                        remainingCredits?.let { onWebCreditsUpdate?.invoke(it) }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Web search failed, falling back to local: ${e.message}")
+                        webContext = "[Web search unavailable: ${e.message}]"
+                    }
+                }
+
                 val engineInstance = engine ?: throw IllegalStateException("Engine is null")
                 val conversation = engineInstance.createConversation()
 
                 try {
                     val personaPrompt = if (useVisualMode && bitmap != null) {
-                        "You are a robotic visual analysis assistant modeled after the Star Trek computer interface. The user has provided a screenshot of their screen. Provide brief, factual, and logically structured responses devoid of emotion or elaboration. Analyze the screenshot and report only relevant technical findings with machine-like precision. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
+                        "You are a robotic visual analysis assistant. Provide brief, factual, and logically structured responses devoid of emotion or elaboration. Analyze the screenshot and report only relevant technical findings with machine-like precision. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     } else {
-                        "You are a robotic computer assistant modeled after the Star Trek computer interface. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
+                        "You are a robotic computer assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
+                    }
+
+                    val fullQuery = buildString {
+                        if (webContext.isNotEmpty()) {
+                            append("$webContext\n\n")
+                        }
+                        append("USER QUERY: $query")
                     }
 
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)
                         if (imagePath != null) {
-                            Message.of("$personaPrompt Screenshot available at: $imagePath. User query: $query")
+                            Message.of("$personaPrompt $fullQuery")
                         } else {
-                            Message.of("$personaPrompt User query: $query (screenshot failed)")
+                            Message.of("$personaPrompt $fullQuery (screenshot failed)")
                         }
                     } else {
-                        Message.of("$personaPrompt User query: $query")
+                        Message.of("$personaPrompt $fullQuery")
                     }
 
                     val sendingMsg = "Message object created, sending to model..."
@@ -266,8 +296,8 @@ class InferenceEngine(private val context: Context) {
         // Try multiple image token formats that vision models might recognize
         // Order: most likely to least likely
         
-        // Persona prompt for Star Trek computer-style responses
-        val personaPrompt = "You are a robotic visual analysis assistant modeled after the Star Trek computer interface. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Analyze the screenshot and report only relevant findings with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
+        // Persona prompt for robotic computer-style responses
+        val personaPrompt = "You are a robotic visual analysis assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Analyze the screenshot and report only relevant findings with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
         
         // Option 1: Gemma3/4 format with <image_soft_token> and system persona
         // This is the official token from the Gemma3 template

@@ -15,6 +15,7 @@ Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy
 - **Pip-Boy Terminal Interface**: Compact 260dp×380dp wrist-mounted industrial terminal with heavy CRT scanlines, VT323 font, metallic bolts, and phosphor green glow
 - **HAL 9000 Voice Synthesis**: Piper TTS integration with a morphing Play/HAL button that pulses in HAL's iconic staccato rhythm (short-short-long)
 - **Visual / Text Mode Toggle**: Switch between vision (screenshot + text) and text-only assistant modes. **TEXT mode is default** while LiteRT-LM multimodal support is pending.
+- **Optional Web Search**: Tavily API integration with opt-in globe toggle (1,000 free credits/month)
 - **Zero Network Access**: All processing happens locally on your device's NPU
 - **Zero Data Retention**: Screenshots exist only in memory, never stored
 - **Zero Background Drain**: No services running when closed—trigger only when needed
@@ -77,6 +78,7 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 | **CRT Effects** | 40% opacity scanlines, vignette darkening, phosphor bloom |
 | **Header** | 40×24dp Iris with servo eyebrows + tabs `[VISUAL] [DATA] [STAT]` |
 | **Mode Toggle** | `TXT` / `VIS` button next to Iris. TXT highlighted by default |
+| **Net Toggle** | Globe icon 🌐 between mode toggle and Play/HAL. Gray + X = offline. Green = web search enabled |
 | **Play/HAL Button** | Morphing terminal play button (⏵) ↔ pulsing red HAL 9000 eye |
 | **Terminal** | Line-numbered response area (01, 02, 03...) + flat `>` command line |
 | **Cursor** | Blinking block `█` cursor |
@@ -253,6 +255,41 @@ The vision API in LiteRT-LM `0.10.0` is non-functional for multimodal input. TEX
 The terminal response area displays:
 - `[TEXT MODE]` — when in text mode
 - `[VISUAL MODE - NO SCREENSHOT]` — when visual mode is on but no bitmap is available
+
+---
+
+## Web Search (Optional)
+
+Ghost can enhance local LLM responses with real-time web search via **Tavily API**.
+
+| Feature | Status |
+|---------|--------|
+| **Default state** | OFF (privacy-first) |
+| **Toggle** | Globe icon 🌐 in header |
+| **Credits** | Free tier: 1,000 searches/month (resets 1st of month) |
+| **Architecture** | Search results injected into local Gemma prompt |
+| **Privacy** | Only query text sent to Tavily. Screenshot stays local. |
+
+### Setup
+
+1. Sign up at https://app.tavily.com (no credit card required)
+2. Get API key (starts with `tvly-...`)
+3. Add to `ghost/local.properties`:
+   ```properties
+   TAVILY_API_KEY=your_key_here
+   ```
+4. Build and install
+
+### Usage
+
+- Tap gray globe (with X) → Turns green, enables web search
+- First search shows "Remaining: XXX" indicator below header
+- Credits display color: Green (>500), Amber (200-500), Red (<200)
+- Toggle OFF → Indicator disappears, purely offline mode
+
+### Architecture
+
+Tavily search results are fetched first, then injected as context into the local Gemma LLM prompt. The LLM synthesizes the web results with its local knowledge. This keeps the HAL 9000 voice and local processing while adding current information.
 
 ---
 

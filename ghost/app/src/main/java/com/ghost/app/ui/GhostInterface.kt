@@ -72,6 +72,9 @@ fun GhostInterface(
     tts: PiperTTS? = null,
     isVisualMode: Boolean = false,
     onVisualModeChange: (Boolean) -> Unit = {},
+    isNetEnabled: Boolean = false,
+    onNetToggle: (Boolean) -> Unit = {},
+    webSearchCredits: Int? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
@@ -165,11 +168,17 @@ fun GhostInterface(
                     localVisualMode = it
                     onVisualModeChange(it)
                 },
+                isNetEnabled = isNetEnabled,
+                onNetToggle = onNetToggle,
                 onClose = onClose,
                 onDebugClick = onDebugClick
             )
 
-            Spacer(modifier = Modifier.height(4.dp))  // Reduced from 8dp
+            RemainingCreditsIndicator(
+                isNetEnabled = isNetEnabled,
+                credits = webSearchCredits,
+                isSearchPending = isGenerating && isNetEnabled && webSearchCredits == null
+            )
 
             // Phosphor divider line
             Box(
@@ -226,6 +235,8 @@ private fun PipBoyHeader(
     tts: PiperTTS?,
     isVisualMode: Boolean,
     onVisualModeChange: (Boolean) -> Unit,
+    isNetEnabled: Boolean,
+    onNetToggle: (Boolean) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit
 ) {
@@ -255,6 +266,14 @@ private fun PipBoyHeader(
         ModeToggle(
             isVisualMode = isVisualMode,
             onToggle = onVisualModeChange
+        )
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        GlobeToggle(
+            isNetEnabled = isNetEnabled,
+            onToggle = onNetToggle,
+            isConfigured = true
         )
 
         Spacer(modifier = Modifier.weight(1f))
@@ -459,6 +478,87 @@ private fun ModeToggle(
             fontSize = 10.sp,
             color = if (isVisualMode) PhosphorGreen else PhosphorBright
         )
+    }
+}
+
+@Composable
+private fun GlobeToggle(
+    isNetEnabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    isConfigured: Boolean
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isNetEnabled) 1.0f else 0.95f,
+        animationSpec = spring(stiffness = 400f, dampingRatio = 0.5f)
+    )
+
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .scale(scale)
+            .clip(RoundedCornerShape(2.dp))
+            .background(
+                if (isNetEnabled) PhosphorGreen.copy(alpha = 0.2f) else GunmetalSurface
+            )
+            .border(
+                width = 1.dp,
+                color = if (isNetEnabled) PhosphorGreen else PhosphorDim.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(2.dp)
+            )
+            .clickable(
+                enabled = isConfigured,
+                onClick = { onToggle(!isNetEnabled) }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "\uD83C\uDF10",
+            fontSize = 16.sp,
+            color = if (isNetEnabled) PhosphorGreen else PhosphorDim.copy(alpha = 0.4f)
+        )
+
+        if (!isNetEnabled) {
+            Text(
+                text = "\u00D7",
+                fontSize = 20.sp,
+                color = PhosphorDim.copy(alpha = 0.6f),
+                modifier = Modifier.offset(x = 1.dp, y = (-1).dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemainingCreditsIndicator(
+    isNetEnabled: Boolean,
+    credits: Int?,
+    isSearchPending: Boolean
+) {
+    AnimatedVisibility(
+        visible = isNetEnabled && (credits != null || isSearchPending),
+        enter = expandVertically(animationSpec = spring(stiffness = 300f, dampingRatio = 0.8f)),
+        exit = shrinkVertically(animationSpec = spring(stiffness = 300f, dampingRatio = 0.8f))
+    ) {
+        Column {
+            Text(
+                text = when {
+                    isSearchPending -> "Searching..."
+                    credits != null -> "Remaining: $credits"
+                    else -> ""
+                },
+                fontFamily = VT323,
+                fontSize = 10.sp,
+                color = when {
+                    credits == null -> PhosphorDim
+                    credits > 500 -> PhosphorGreen
+                    credits > 200 -> Color(0xFFFFAA00)
+                    else -> Color(0xFFFF4444)
+                },
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+        }
     }
 }
 

@@ -74,6 +74,8 @@ class ChatActivity : ComponentActivity() {
     private val _isGenerating = mutableStateOf(false)
     private val _isEngineReady = mutableStateOf(false)
     private val _isVisualMode = mutableStateOf(false)
+    private val _isNetEnabled = mutableStateOf(false)
+    private val _webSearchCredits = mutableStateOf<Int?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,8 +115,18 @@ class ChatActivity : ComponentActivity() {
                     tts = piperTTS,
                     isVisualMode = _isVisualMode.value,
                     onVisualModeChange = { _isVisualMode.value = it },
+                    isNetEnabled = _isNetEnabled.value,
+                    onNetToggle = {
+                        _isNetEnabled.value = it
+                        if (!it) _webSearchCredits.value = null
+                    },
+                    webSearchCredits = _webSearchCredits.value,
                     onSendQuery = { query ->
-                        handleQuery(query, _isVisualMode.value)
+                        handleQuery(
+                            query = query,
+                            useVisualMode = _isVisualMode.value,
+                            useNetSearch = _isNetEnabled.value
+                        )
                     },
                     onClose = { finishAndRemoveTask() }
                 )
@@ -138,9 +150,9 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
-    private fun handleQuery(query: String, useVisualMode: Boolean) {
-        Log.i(TAG, "User query: $query (visualMode=$useVisualMode)")
-        DebugLogger.i(TAG, "User query: $query (visualMode=$useVisualMode)")
+    private fun handleQuery(query: String, useVisualMode: Boolean, useNetSearch: Boolean) {
+        Log.i(TAG, "User query: $query (visualMode=$useVisualMode, netSearch=$useNetSearch)")
+        DebugLogger.i(TAG, "User query: $query (visualMode=$useVisualMode, netSearch=$useNetSearch)")
 
         if (useVisualMode && capturedBitmap == null) {
             _responseText.value = "Error: No screenshot available"
@@ -170,6 +182,7 @@ class ChatActivity : ComponentActivity() {
             bitmap = bitmap,
             query = query,
             useVisualMode = useVisualMode,
+            useWebSearch = useNetSearch,
             onToken = { token ->
                 mainScope.launch {
                     _responseText.value += token
@@ -186,6 +199,11 @@ class ChatActivity : ComponentActivity() {
                     _responseText.value = "Error: $error"
                     _isGenerating.value = false
                     DebugLogger.e(TAG, "Inference error: $error")
+                }
+            },
+            onWebCreditsUpdate = { credits ->
+                mainScope.launch {
+                    _webSearchCredits.value = credits
                 }
             }
         )
@@ -232,6 +250,9 @@ private fun ChatScreenPiP(
     tts: PiperTTS?,
     isVisualMode: Boolean,
     onVisualModeChange: (Boolean) -> Unit,
+    isNetEnabled: Boolean,
+    onNetToggle: (Boolean) -> Unit,
+    webSearchCredits: Int?,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -301,6 +322,9 @@ private fun ChatScreenPiP(
                     tts = tts,
                     isVisualMode = isVisualMode,
                     onVisualModeChange = onVisualModeChange,
+                    isNetEnabled = isNetEnabled,
+                    onNetToggle = onNetToggle,
+                    webSearchCredits = webSearchCredits,
                     onSendQuery = onSendQuery,
                     onClose = onClose
                 )

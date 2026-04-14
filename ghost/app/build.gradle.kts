@@ -19,6 +19,11 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        val tavilyApiKey: String = project.findProperty("TAVILY_API_KEY") as String?
+            ?: System.getenv("TAVILY_API_KEY")
+            ?: ""
+        buildConfigField("String", "TAVILY_API_KEY", "\"$tavilyApiKey\"")
     }
 
     buildTypes {
@@ -94,6 +99,10 @@ dependencies {
 
     // Sherpa-ONNX for Piper TTS inference
     implementation("com.github.k2-fsa:sherpa-onnx:v1.12.38")
+
+    // Web Search (Tavily)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -12,6 +12,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 - ⚡ **Hardware Accelerated**: Uses Hexagon NPU with GPU fallback
 - 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
 - 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
+- 🌐 **Optional Web Search**: Tavily API with opt-in globe toggle. Search results injected into local Gemma prompt
 - 🔋 **Zero Background Drain**: No services, no notifications when closed
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
@@ -70,9 +71,10 @@ Copy `gemma-4-e2b.litertlm` to `Internal Storage/Download/GhostModels/`
 2. **Capture**: Single frame is captured (1280×720)
 3. **PiP Window**: Floating terminal appears with Iris and mode toggle
 4. **Select Mode**: `TXT` (default) for text-only, `VIS` for screenshot analysis
-5. **Ask**: Type your question about the screen content
-6. **Analyze**: Local LLM processes the query and streams the answer
-7. **Close**: Tap × or swipe off-screen to dismiss
+5. **Toggle Web Search** (optional): Tap globe 🌐 to enable Tavily search
+6. **Ask**: Type your question about the screen content
+7. **Analyze**: Local LLM processes the query and streams the answer
+8. **Close**: Tap × or swipe off-screen to dismiss
 
 ## Architecture
 
@@ -192,6 +194,13 @@ Device will automatically switch from NPU to GPU if it gets warm
 Private use only. Not for redistribution.
 
 ## Version History
+
+### v1.3 (2026-04-13)
+- Added Tavily web search integration (`TavilySearchService.kt`)
+- Globe toggle 🌐 in header for opt-in web search (default OFF)
+- Credits indicator with color-coded remaining searches
+- Search results injected into local Gemma prompt (Search → Local LLM architecture)
+- API key loaded from `local.properties` into `BuildConfig`
 
 ### v1.2 (2026-04-13)
 - Added Visual/Text mode toggle in terminal header (`TXT` / `VIS`)
