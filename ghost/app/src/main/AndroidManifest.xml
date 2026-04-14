@@ -3,16 +3,18 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        INTERNET permission is required for the optional Tavily web search toggle.
-        All LLM inference remains local. Only query text is sent to Tavily when
-        the user explicitly enables the globe toggle.
+        Ghost operates primarily offline with local LLM inference.
+        INTERNET permission is optional - only required for Tavily web search feature.
+        Without this permission, the app functions fully in offline mode.
     -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Storage permission for reading model file from external storage -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    
+    <!-- INTERNET permission for Tavily web search API -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- AccessibilityService for silent screenshots (replaces MediaProjection) -->
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
