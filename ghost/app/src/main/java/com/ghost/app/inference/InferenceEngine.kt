@@ -239,9 +239,9 @@ class InferenceEngine(private val context: Context) {
                             append(articleContent)
                             append("\n\nuser_query: ")
                             append(query)
-                            append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. If article was truncated, focus on key facts in the provided content. Start your response with 'Based on ")
+                            append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. If article was truncated, focus on key facts in the provided content. Start your response with 'Based on Wiki-page ")
                             append(articleTitle)
-                            append("' followed by exactly 5 concise sentences. Do not include any other text.")
+                            append(":' followed by exactly 5 concise sentences. Do not include any other text.")
                         }
                     } else {
                         "$basePersona USER QUERY: $query"

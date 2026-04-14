@@ -78,6 +78,7 @@ class ChatActivity : ComponentActivity() {
     private val _isEngineReady = mutableStateOf(false)
     private val _isVisualMode = mutableStateOf(false)
     private val _isNetEnabled = mutableStateOf(false)
+    private val _lastUserQuery = mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,10 +127,12 @@ class ChatActivity : ComponentActivity() {
                     isNetEnabled = _isNetEnabled.value,
                     onNetToggle = { _isNetEnabled.value = it },
                     isNetConfigured = true,
+                    userQuery = _lastUserQuery.value,
                     onSendQuery = { query ->
                         if (_isNetEnabled.value && _responseText.value.contains("WEB SEARCH ERROR")) {
                             _responseText.value = "WEB SEARCH ERROR: Previous Wikipedia search failed.\n\nTurn OFF web toggle to use local LLM."
                         } else {
+                            _lastUserQuery.value = query
                             handleQuery(
                                 query = query,
                                 useVisualMode = _isVisualMode.value,
@@ -267,6 +270,7 @@ private fun ChatScreenPiP(
     isNetEnabled: Boolean,
     onNetToggle: (Boolean) -> Unit,
     isNetConfigured: Boolean = true,
+    userQuery: String? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -339,6 +343,7 @@ private fun ChatScreenPiP(
                     isNetEnabled = isNetEnabled,
                     onNetToggle = onNetToggle,
                     isNetConfigured = isNetConfigured,
+                    userQuery = userQuery,
                     onSendQuery = onSendQuery,
                     onClose = onClose
                 )

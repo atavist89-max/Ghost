@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,6 +80,7 @@ fun GhostInterface(
     isNetEnabled: Boolean = false,
     onNetToggle: (Boolean) -> Unit = {},
     isNetConfigured: Boolean = true,
+    userQuery: String? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit = {},
@@ -629,6 +631,20 @@ private fun TerminalResponseArea(
                             fontSize = 10.sp,
                             color = Color(0xFFFFAA00).copy(alpha = 0.7f),
                             modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+
+                    // User query display (white, right-aligned)
+                    if (!userQuery.isNullOrEmpty()) {
+                        Text(
+                            text = userQuery,
+                            fontFamily = VT323,
+                            fontSize = 18.sp,
+                            color = Color.White,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
                         )
                     }
 
