@@ -198,6 +198,7 @@ fun GhostInterface(
                 isEngineReady = isEngineReady,
                 isVisualMode = localVisualMode,
                 capturedBitmap = capturedBitmap,
+                userQuery = userQuery,
                 scrollState = scrollState,
                 modifier = Modifier.weight(1f)
             )
@@ -539,6 +540,7 @@ private fun TerminalResponseArea(
     isEngineReady: Boolean,
     isVisualMode: Boolean,
     capturedBitmap: Bitmap?,
+    userQuery: String? = null,
     scrollState: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier
 ) {
