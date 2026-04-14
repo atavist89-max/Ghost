@@ -175,7 +175,8 @@ class InferenceEngine(private val context: Context) {
         onToken: (String) -> Unit,
         onComplete: () -> Unit,
         onError: (String) -> Unit,
-        onWebCreditsUpdate: ((Int) -> Unit)? = null
+        onWebCreditsUpdate: ((Int) -> Unit)? = null,
+        onWebSearchError: ((String) -> Unit)? = null
     ) {
         if (!isInitialized.get() || isClosed.get()) {
             onError("Inference engine not initialized")
@@ -201,8 +202,12 @@ class InferenceEngine(private val context: Context) {
                             onWebCreditsUpdate?.invoke(-1) // Sentinel for unknown
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Web search failed, falling back to local: ${e.message}")
-                        webContext = "[Web search unavailable: ${e.message}]"
+                        Log.e(TAG, "Web search failed: ${e.message}", e)
+                        val errorMsg = "WEB SEARCH ERROR: ${e.message ?: "Unknown error"}"
+                        webContext = errorMsg
+                        withContext(Dispatchers.Main) {
+                            onWebSearchError?.invoke(errorMsg)
+                        }
                     }
                 } else if (useWebSearch) {
                     webContext = "[Web search unavailable: API key not configured. Add TAVILY_API_KEY to local.properties]"

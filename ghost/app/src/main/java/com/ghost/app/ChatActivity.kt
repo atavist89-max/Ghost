@@ -212,6 +212,12 @@ class ChatActivity : ComponentActivity() {
                 mainScope.launch {
                     _webSearchCredits.value = credits
                 }
+            },
+            onWebSearchError = { error ->
+                mainScope.launch {
+                    _responseText.value = error
+                    Toast.makeText(this@ChatActivity, error, Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
