@@ -1,6 +1,7 @@
 package com.ghost.app.inference
 
 import android.content.Context
+import android.os.Environment
 import android.util.Log
 import com.ghost.app.utils.GhostPaths
 import com.google.gson.Gson
@@ -12,20 +13,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Tavily Search API service for web-enhanced local LLM queries.
- * Reads API key from external storage (GhostModels folder) to allow
- * key rotation without APK rebuild.
+ * Tavily Search API service with diagnostic logging.
+ * FIX: Removed 'by lazy' caching that was causing empty key to be cached permanently.
  */
 class TavilySearchService(private val context: Context) {
 
     companion object {
-        private const val TAG = "TavilySearch"
+        private const val TAG = "TavilyTTS"
         private const val KEY_FILENAME = "tavily_key.txt"
-        private const val DEFAULT_KEY = ""
     }
 
     private val client = OkHttpClient.Builder()
@@ -35,40 +33,62 @@ class TavilySearchService(private val context: Context) {
 
     private val gson = Gson()
 
-    // Read key from external storage instead of BuildConfig
-    private val apiKey: String by lazy {
-        readApiKeyFromStorage()
-    }
+    // FIX: Changed from 'by lazy' to getter - reads fresh each time
+    private val apiKey: String get() = readApiKeyFromStorage()
 
     /**
-     * Read API key from GhostModels folder using same logic as GhostPaths.
-     * Location: /sdcard/Download/GhostModels/tavily_key.txt
+     * Read API key with multiple fallback paths and detailed logging.
      */
     private fun readApiKeyFromStorage(): String {
+        Log.d(TAG, "=== Starting API key read ===")
+
         return try {
-            // Use same path resolution as GhostPaths.findModelFile()
-            val modelsDir = GhostPaths.findModelFile()?.parentFile
-                ?: File(GhostPaths.MODEL_PATH).parentFile
-                ?: context.getExternalFilesDir(null)?.resolve("models")
-                ?: context.filesDir.resolve("models")
+            // Try multiple paths in order
+            val pathsToTry = listOf(
+                GhostPaths.findModelFile()?.parentFile,
+                File(GhostPaths.MODEL_PATH).parentFile,
+                Environment.getExternalStorageDirectory()?.resolve("Download")?.resolve("GhostModels"),
+                File("/storage/emulated/0/Download/GhostModels"),
+                context.getExternalFilesDir(null)?.resolve("models"),
+                context.filesDir.resolve("models")
+            )
 
-            val keyFile = File(modelsDir, KEY_FILENAME)
+            for (dir in pathsToTry.filterNotNull().distinctBy { it.absolutePath }) {
+                val keyFile = File(dir, KEY_FILENAME)
+                Log.d(TAG, "Checking path: ${keyFile.absolutePath}")
+                Log.d(TAG, "  exists=${keyFile.exists()}, canRead=${keyFile.canRead()}, size=${keyFile.length()}")
 
-            if (keyFile.exists() && keyFile.canRead()) {
-                val key = keyFile.readText().trim()
-                Log.i(TAG, "Tavily API key loaded from: ${keyFile.absolutePath}")
-                key
-            } else {
-                Log.w(TAG, "$KEY_FILENAME not found in ${modelsDir.absolutePath}")
-                DEFAULT_KEY
+                if (keyFile.exists() && keyFile.canRead()) {
+                    val content = keyFile.readText()
+                    val key = content.trim()
+                    Log.i(TAG, "FOUND KEY at: ${keyFile.absolutePath}")
+                    Log.i(TAG, "  Raw length: ${content.length}, trimmed length: ${key.length}")
+                    Log.i(TAG, "  Starts with: ${key.take(20)}...")
+                    return key
+                }
             }
+
+            Log.w(TAG, "Key file NOT FOUND in any location")
+            ""
+
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read Tavily API key: ${e.message}", e)
-            DEFAULT_KEY
+            Log.e(TAG, "Exception reading key: ${e.message}", e)
+            ""
         }
     }
 
-    fun isConfigured(): Boolean = apiKey.isNotBlank() && apiKey.startsWith("tvly-")
+    fun isConfigured(): Boolean {
+        val key = apiKey  // Triggers fresh read
+        val isBlank = key.isBlank()
+        val startsWithTvly = key.startsWith("tvly-")
+        val configured = !isBlank && startsWithTvly
+
+        Log.d(TAG, "isConfigured() check: isBlank=$isBlank, startsWithTvly=$startsWithTvly, RESULT=$configured")
+        if (configured) {
+            Log.d(TAG, "  Key preview: ${key.take(15)}...")
+        }
+        return configured
+    }
 
     data class SearchRequest(
         @SerializedName("api_key") val apiKey: String,
@@ -93,12 +113,12 @@ class TavilySearchService(private val context: Context) {
         val score: Double?
     )
 
-    /**
-     * Perform web search via Tavily API.
-     */
     suspend fun search(query: String): Pair<String, Int?> = withContext(Dispatchers.IO) {
+        Log.d(TAG, "search() called with query: ${query.take(30)}...")
+
         if (!isConfigured()) {
-            throw IllegalStateException("Tavily API key not configured. Add $KEY_FILENAME to GhostModels folder.")
+            Log.e(TAG, "search() aborted: API not configured")
+            throw IllegalStateException("Tavily API key not configured")
         }
 
         val requestBody = SearchRequest(
@@ -117,15 +137,22 @@ class TavilySearchService(private val context: Context) {
             .post(body)
             .build()
 
+        Log.d(TAG, "Sending request to Tavily API...")
+
         client.newCall(request).execute().use { response ->
+            Log.d(TAG, "Response code: ${response.code}")
+
             if (!response.isSuccessful) {
-                throw IOException("Tavily API error: ${response.code} ${response.message}")
+                val errorBody = response.body?.string()
+                Log.e(TAG, "API error: ${response.code}, body: $errorBody")
+                throw IOException("Tavily API error: ${response.code}")
             }
 
             val remainingCredits = response.header("X-RateLimit-Remaining")?.toIntOrNull()
+            Log.d(TAG, "Remaining credits from header: $remainingCredits")
 
             val responseBody = response.body?.string()
-                ?: throw IOException("Empty response from Tavily")
+                ?: throw IOException("Empty response")
 
             val searchResult = gson.fromJson(responseBody, SearchResponse::class.java)
 
@@ -141,6 +168,7 @@ class TavilySearchService(private val context: Context) {
                 contextBuilder.append("    ${result.content.take(200)}...\n\n")
             }
 
+            Log.d(TAG, "Search complete, context length: ${contextBuilder.length}")
             Pair(contextBuilder.toString().trim(), remainingCredits)
         }
     }

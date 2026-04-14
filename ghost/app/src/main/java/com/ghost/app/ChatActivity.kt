@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -106,7 +107,8 @@ class ChatActivity : ComponentActivity() {
         }
 
         val tavilyConfigured = TavilySearchService(applicationContext).isConfigured()
-        Log.d(TAG, "Tavily configured: $tavilyConfigured")
+        Log.e("TAVILY_DEBUG", "=== Startup check: Tavily configured = $tavilyConfigured ===")
+        Toast.makeText(this, "Tavily: $tavilyConfigured", Toast.LENGTH_LONG).show()
 
         // Set up Compose UI with transparent background and keyboard handling
         setContent {

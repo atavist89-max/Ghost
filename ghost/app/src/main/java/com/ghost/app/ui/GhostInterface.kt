@@ -32,12 +32,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ghost.app.BuildConfig
 import com.ghost.app.inference.PiperTTS
 import com.ghost.app.ui.theme.VT323
+import android.widget.Toast
 
 // Phosphor Green Cyberpunk Colors
 private val PhosphorGreen = Color(0xFF39FF14)
@@ -493,6 +495,7 @@ private fun GlobeToggle(
     onToggle: (Boolean) -> Unit,
     isConfigured: Boolean
 ) {
+    val context = LocalContext.current
     val scale by animateFloatAsState(
         targetValue = if (isNetEnabled) 1.0f else 0.95f,
         animationSpec = spring(stiffness = 400f, dampingRatio = 0.5f)
@@ -511,10 +514,19 @@ private fun GlobeToggle(
                 color = if (isNetEnabled) PhosphorGreen else PhosphorDim.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(2.dp)
             )
-            .clickable(
-                enabled = isConfigured,
-                onClick = { onToggle(!isNetEnabled) }
-            ),
+            .clickable {
+                Log.d("GlobeToggle", "Tapped. isConfigured=$isConfigured, isNetEnabled=$isNetEnabled")
+
+                if (!isConfigured && !isNetEnabled) {
+                    Toast.makeText(
+                        context,
+                        "No Tavily key found in GhostModels/",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    onToggle(!isNetEnabled)
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Text(

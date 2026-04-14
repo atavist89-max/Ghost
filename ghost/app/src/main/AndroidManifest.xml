@@ -8,6 +8,7 @@
         the user explicitly enables the globe toggle.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Storage permission for reading model file from external storage -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
