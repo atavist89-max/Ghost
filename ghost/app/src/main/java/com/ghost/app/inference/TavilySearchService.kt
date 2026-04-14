@@ -27,6 +27,16 @@ class TavilySearchService(private val context: Context) {
         private const val KEY_FILENAME = "tavily_key.txt"
     }
 
+    private fun logToFile(tag: String, message: String) {
+        try {
+            val logFile = File("/storage/emulated/0/Download/GhostModels/debug_log.txt")
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+            logFile.appendText("[$timestamp] [$tag] $message\n")
+        } catch (e: Exception) {
+            // Silent fail - don't crash if logging fails
+        }
+    }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -117,6 +127,11 @@ class TavilySearchService(private val context: Context) {
     suspend fun search(query: String): Pair<String, Int?> = withContext(Dispatchers.IO) {
         Log.d(TAG, "search() called with query: ${query.take(30)}...")
 
+        // Clear previous log
+        try {
+            File("/storage/emulated/0/Download/GhostModels/debug_log.txt").delete()
+        } catch (e: Exception) { /* ignore */ }
+
         if (!isConfigured()) {
             Log.e(TAG, "search() aborted: API not configured")
             throw IllegalStateException("Tavily API key not configured")
@@ -162,9 +177,26 @@ class TavilySearchService(private val context: Context) {
             Log.e(TAG, "Parsed results size: ${searchResult.results?.size ?: 0}")
             Log.e(TAG, "Parsed answer isNull: ${searchResult.answer == null}")
 
+            logToFile("TAVILY", "Raw response length: ${responseBody.length}")
+            logToFile("TAVILY", "Results count: ${searchResult.results?.size ?: 0}")
+            logToFile("TAVILY", "Answer present: ${searchResult.answer != null}")
+            logToFile("TAVILY", "First result title: ${searchResult.results?.firstOrNull()?.title ?: "NONE"}")
+            logToFile("TAVILY", "First result content: ${searchResult.results?.firstOrNull()?.content?.take(100) ?: "NONE"}")
+
             val hasResults = !searchResult.results.isNullOrEmpty() || !searchResult.answer.isNullOrEmpty()
             if (!hasResults) {
+                logToFile("TAVILY", "ERROR: Empty results returned!")
                 throw IOException("Tavily returned empty results - possible JSON parsing failure")
+            } else {
+                logToFile("TAVILY", "SUCCESS: Results found")
+            }
+
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Tavily: ${searchResult.results?.size ?: 0} results",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
 
             val contextBuilder = StringBuilder()

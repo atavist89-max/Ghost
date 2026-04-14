@@ -43,6 +43,16 @@ class InferenceEngine(private val context: Context) {
         private const val SCREENSHOT_CACHE_FILE = "ghost_screenshot.jpg"
     }
 
+    private fun logToFile(tag: String, message: String) {
+        try {
+            val logFile = File("/storage/emulated/0/Download/GhostModels/debug_log.txt")
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+            logFile.appendText("[$timestamp] [$tag] $message\n")
+        } catch (e: Exception) {
+            // Silent fail
+        }
+    }
+
     private var engine: Engine? = null
     private val thermalMonitor = ThermalMonitor(context)
     private val isInitialized = AtomicBoolean(false)
@@ -226,6 +236,10 @@ class InferenceEngine(private val context: Context) {
 
                     val hasRealContent = webContext.length > "WEB SEARCH RESULTS:\n".length + 10
 
+                    logToFile("INFERENCE", "Web context length: ${webContext.length}")
+                    logToFile("INFERENCE", "Has real content: $hasRealContent")
+                    logToFile("INFERENCE", "Web context preview: ${webContext.take(100)}")
+
                     val fullQuery = buildString {
                         if (hasRealContent && !webContext.startsWith("WEB SEARCH ERROR")) {
                             append("The following WEB SEARCH RESULTS contain accurate, current information as of today. ")
@@ -247,6 +261,10 @@ class InferenceEngine(private val context: Context) {
                     Log.e(TAG, "FINAL PROMPT LENGTH: ${finalPrompt.length}")
                     Log.e(TAG, "WEB CONTEXT IN PROMPT: ${fullQuery.contains("WEB SEARCH RESULTS")}")
                     Log.e(TAG, "WEB CONTEXT PREVIEW: ${webContext.take(200)}")
+
+                    logToFile("INFERENCE", "Final prompt length: ${finalPrompt.length}")
+                    logToFile("INFERENCE", "Contains web results: ${finalPrompt.contains("WEB SEARCH RESULTS")}")
+                    logToFile("INFERENCE", "Prompt ends with: ${finalPrompt.takeLast(100)}")
 
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)
