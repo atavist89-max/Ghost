@@ -3,9 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        CRITICAL: No INTERNET permission declared
-        This app operates completely offline with local LLM inference
+        INTERNET permission is required for the optional Tavily web search toggle.
+        All LLM inference remains local. Only query text is sent to Tavily when
+        the user explicitly enables the globe toggle.
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Storage permission for reading model file from external storage -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"

@@ -2,7 +2,7 @@ name: Build Ghost APK
 
 on:
   push:
-    branches: [ main, develop, feature/pip-cyberpunk-ui ]
+    branches: [ main, develop, feature/pip-cyberpunk-ui, feature/tavily-web-search ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -60,11 +60,11 @@ jobs:
         path: ghost/app/build/outputs/apk/release/app-release-signed.apk
         retention-days: 7
         
-    - name: Verify APK (no INTERNET permission)
+    - name: Verify APK permissions
       run: |
         echo "Checking APK permissions..."
         sudo apt-get update && sudo apt-get install -y aapt
-        aapt dump permissions ghost/app/build/outputs/apk/release/app-release-signed.apk | grep -i internet && exit 1 || echo "✓ No INTERNET permission found"
+        aapt dump permissions ghost/app/build/outputs/apk/release/app-release-signed.apk | grep -i internet && echo "✓ INTERNET permission found (required for optional Tavily web search)" || exit 1
         
     - name: Create Release
       if: github.ref == 'refs/heads/main'
