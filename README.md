@@ -33,6 +33,225 @@ Internal Storage/Download/GhostModels/gemma-4-e2b.litertlm
 
 The file should be approximately 2.5GB. The app will not function without it.
 
+## Phone-Only Setup Guide (No PC Required)
+
+You can set up Ghost entirely from your Android phone without ever touching a desktop computer. This guide covers installing Termux, downloading the LLM and TTS models, converting the HAL 9000 voice, and installing the APK.
+
+### What You Need
+- Android 16 device (e.g., Samsung Galaxy S25+)
+- 12GB+ RAM
+- ~5GB free storage
+- Stable Wi-Fi connection
+
+---
+
+### Step 1: Install Termux
+
+Termux is a terminal emulator for Android. You need it to download large model files directly to the correct folder.
+
+**Do NOT install Termux from the Google Play Store** — that version is outdated and unsupported.
+
+**Install from F-Droid (recommended):**
+1. Open your phone browser and go to: `https://f-droid.org/packages/com.termux/`
+2. Tap **"Download APK"**
+3. Once downloaded, tap the APK to install. If prompted, allow installation from your browser.
+4. Open Termux.
+
+**Alternative: Install from GitHub:**
+1. Go to: `https://github.com/termux/termux-app/releases`
+2. Find the latest release and download `termux-app_v*.apk`
+3. Install and open it.
+
+**Grant Storage Permission:**
+Inside Termux, run:
+```bash
+termux-setup-storage
+```
+Tap **Allow** when Android asks for file access. This creates a link to your internal storage at `/storage/emulated/0/`.
+
+---
+
+### Step 2: Create the Model Folder
+
+All models must live in `Internal Storage/Download/GhostModels/`. Create it now:
+
+```bash
+mkdir -p /storage/emulated/0/Download/GhostModels
+```
+
+---
+
+### Step 3: Download the Gemma 4 E2B LLM Model
+
+This is the brain of Ghost (~2.5 GB). Download it with `wget` inside Termux:
+
+```bash
+cd /storage/emulated/0/Download/GhostModels
+wget https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm -O gemma-4-e2b.litertlm
+```
+
+> **Tip:** If `wget` is not installed, run `pkg install wget` first.  
+> **Tip:** This download can take 10–30 minutes. Keep Termux in the foreground or plug in your charger so Android does not kill the process.
+
+Verify the file is there:
+```bash
+ls -lh /storage/emulated/0/Download/GhostModels/gemma-4-e2b.litertlm
+```
+
+If the download is interrupted, resume it with:
+```bash
+wget -c https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm -O gemma-4-e2b.litertlm
+```
+
+---
+
+### Step 4: Download the HAL 9000 TTS Model Files
+
+Ghost speaks with a HAL 9000 voice using a Piper TTS model. Download the raw files:
+
+```bash
+cd /storage/emulated/0/Download/GhostModels
+wget https://huggingface.co/campwill/HAL-9000-Piper-TTS/resolve/main/hal.onnx
+wget https://huggingface.co/campwill/HAL-9000-Piper-TTS/resolve/main/hal.onnx.json
+```
+
+---
+
+### Step 5: Convert the HAL Model (Google Colab on Your Phone)
+
+The raw HAL model needs metadata patching before Sherpa-ONNX can use it. Because `pip install onnx` almost always fails inside Termux, the reliable phone-only method is **Google Colab** in your web browser.
+
+1. Open **Chrome** on your phone and go to: `https://colab.research.google.com`
+2. Sign in with a Google account (free to create)
+3. Tap **"New notebook"**
+4. Add and run these two cells:
+
+**Cell 1 — Upload files:**
+```python
+from google.colab import files
+uploaded = files.upload()  # Upload hal.onnx and hal.onnx.json
+```
+> Tap the upload widget and select `hal.onnx` and `hal.onnx.json` from `Internal Storage/Download/GhostModels/`.
+
+**Cell 2 — Convert:**
+```python
+import json, os
+from typing import Any, Dict
+import onnx
+
+def add_meta_data(filename, meta_data):
+    model = onnx.load(filename)
+    while len(model.metadata_props):
+        model.metadata_props.pop()
+    for key, value in meta_data.items():
+        meta = model.metadata_props.add()
+        meta.key = key
+        meta.value = str(value)
+    onnx.save(model, filename)
+
+config = json.load(open("hal.onnx.json"))
+
+# Generate tokens.txt
+with open("tokens.txt", "w", encoding="utf-8") as f:
+    for symbol, ids in config["phoneme_id_map"].items():
+        f.write(f"{symbol} {ids[0]}\n")
+
+sample_rate = config["audio"]["sample_rate"]
+if sample_rate == 22500:
+    sample_rate = 22050
+
+meta_data = {
+    "model_type": "vits",
+    "comment": "piper",
+    "language": config.get("language", {}).get("code", "en-us").split("-")[0],
+    "voice": config.get("espeak", {}).get("voice", "en-us"),
+    "has_espeak": 1,
+    "n_speakers": config.get("num_speakers", 1),
+    "sample_rate": sample_rate,
+}
+add_meta_data("hal.onnx", meta_data)
+print("Conversion complete! Downloading files...")
+files.download("hal.onnx")
+files.download("tokens.txt")
+```
+
+5. When Chrome prompts you to download, save both files **back into** `Internal Storage/Download/GhostModels/`, overwriting the old `hal.onnx`.
+
+> **Important:** The app auto-generates `tokens.txt` on-device if `hal.onnx.json` is present, but the ONNX metadata patch **must** be done in Colab. Do not skip this step.
+
+---
+
+### Step 6: Download `espeak-ng-data`
+
+Sherpa-ONNX needs phoneme data to speak. Download it in Termux:
+
+```bash
+cd /storage/emulated/0/Download/GhostModels
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2
+tar xf espeak-ng-data.tar.bz2
+rm espeak-ng-data.tar.bz2
+```
+
+Your `GhostModels` folder should now contain:
+```
+gemma-4-e2b.litertlm   (the LLM, ~2.5 GB)
+hal.onnx               (patched HAL voice model)
+hal.onnx.json          (HAL voice config)
+tokens.txt             (phoneme tokens)
+espeak-ng-data/        (phoneme data directory)
+```
+
+---
+
+### Step 7: Get the Ghost APK
+
+Because building an Android app requires the Android SDK and NDK, you need a pre-built APK.
+
+**Option A — GitHub Actions Artifact (recommended)**
+1. On your phone browser, go to the Ghost GitHub repository → **Actions** tab
+2. Find the latest successful workflow run for **"Build Ghost APK"**
+3. Tap it, scroll down to **Artifacts**, and download `ghost-pip-ui-apk`
+4. Extract the ZIP (your file manager can usually do this) — you will find `app-release-signed.apk`
+
+**Option B — Ask a friend**
+Send them the repo link and ask them to run:
+```bash
+cd ghost
+./gradlew assembleRelease
+```
+Then have them send you the APK via messaging app or cloud storage.
+
+**Option C — Draft Release**
+Check the repository's **Releases** page for a draft release that may contain the APK.
+
+---
+
+### Step 8: Install the APK
+
+1. Open your file manager and navigate to the downloaded APK
+2. Tap it. If Android blocks it, go to **Settings → Apps → Install unknown apps** and allow your file manager or browser.
+3. Tap **Install**.
+
+---
+
+### Step 9: First Launch & Permissions
+
+Open Ghost. You will be sent to system settings to grant:
+
+1. **All files access** — so Ghost can read the 2.5GB model
+2. **Display over other apps** — so the floating PiP window can appear
+
+Grant both, then return to Ghost.
+
+---
+
+### Step 10: Trigger Ghost
+
+1. Go to **Settings → Advanced features → Side key**
+2. Set **Double press** to open an app, and choose **Ghost**
+3. Double-tap the Side Key. A permission dialog for screen capture will appear — tap **Start now**
+4. The Ghost terminal opens. You are ready to use it.
+
 ## Installation
 
 ### 1. Build from Source
@@ -163,7 +382,7 @@ ghost/
 Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Download/GhostModels/`
 
 ### HAL 9000 voice not playing
-1. **Ensure you converted the model.** If you don't have a desktop, use **Google Colab** in your phone browser (see `README.md` for the notebook script).
+1. **Ensure you converted the model.** If you don't have a desktop, use **Google Colab** in your phone browser (see the [Phone-Only Setup Guide](#phone-only-setup-guide-no-pc-required) above).
    ```bash
    # Desktop (reliable)
    pip install onnx==1.17.0
@@ -183,6 +402,11 @@ Check that no other app is currently using MediaProjection
 
 ### Thermal throttling
 Device will automatically switch from NPU to GPU if it gets warm
+
+### Termux download keeps failing
+- Resume interrupted downloads with `wget -c <url>`
+- Keep Termux in the foreground and disable battery optimization for it
+- Use a strong Wi-Fi connection; mobile data may drop on files this large
 
 ## Safety & Privacy
 
