@@ -252,33 +252,6 @@ Grant both, then return to Ghost.
 3. Double-tap the Side Key. A permission dialog for screen capture will appear — tap **Start now**
 4. The Ghost terminal opens. You are ready to use it.
 
-## Installation
-
-### 1. Build from Source
-
-```bash
-cd ghost
-./gradlew assembleRelease
-```
-
-### 2. Install APK
-
-```bash
-adb install app/build/outputs/apk/release/app-release-unsigned.apk
-```
-
-Or manually copy the APK to your device and install via file manager.
-
-### 3. Grant Permissions
-
-On first launch, the app will redirect you to system settings to grant:
-- **All files access** (for reading the model file)
-- **Display over other apps** (for the floating PiP window)
-
-### 4. Place Model File
-
-Copy `gemma-4-e2b.litertlm` to `Internal Storage/Download/GhostModels/`
-
 ## Usage
 
 ### Trigger
