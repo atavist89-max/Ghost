@@ -93,6 +93,10 @@ fun GhostInterface(
 
     LaunchedEffect(isVisualMode) {
         localVisualMode = isVisualMode
+        // Optional: disable web search when entering visual mode
+        if (isVisualMode && isNetEnabled) {
+            onNetToggle(false)
+        }
     }
 
     // Iris state management
@@ -273,11 +277,16 @@ private fun PipBoyHeader(
 
         Spacer(modifier = Modifier.width(4.dp))
 
-        GlobeToggle(
-            isNetEnabled = isNetEnabled,
-            onToggle = onNetToggle,
-            isConfigured = isNetConfigured
-        )
+        // ONLY SHOW WEB TOGGLE WHEN IN TXT MODE (not visual mode)
+        if (!isVisualMode) {
+            GlobeToggle(
+                isNetEnabled = isNetEnabled,
+                onToggle = onNetToggle,
+                isConfigured = isNetConfigured
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+        }
 
         Spacer(modifier = Modifier.weight(1f))
 

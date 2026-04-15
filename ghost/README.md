@@ -71,7 +71,7 @@ Copy `gemma-4-e2b.litertlm` to `Internal Storage/Download/GhostModels/`
 2. **Capture**: Single frame is captured (1280×720)
 3. **PiP Window**: Floating terminal appears with Iris and mode toggle
 4. **Select Mode**: `TXT` (default) for text-only, `VIS` for screenshot analysis
-5. **Toggle Web Search** (optional): Tap globe 🌐 to enable Wikipedia search
+5. **Toggle Web Search** (optional, TXT mode only): Tap globe 🌐 to enable Wikipedia search. Hidden in VIS mode to reduce visual clutter
 6. **Ask**: Type your question about the screen content
 7. **Analyze**: Local LLM processes the query and streams the answer
 8. **Close**: Tap × or swipe off-screen to dismiss
@@ -196,6 +196,11 @@ Device will automatically switch from NPU to GPU if it gets warm
 Private use only. Not for redistribution.
 
 ## Version History
+
+### v1.5.1 (2026-04-15)
+- WEB toggle (`🌐`) is now visible only in `TXT` mode; hidden in `VIS` mode
+- Automatically disables web search when entering `VIS` mode to prevent accidental queries
+- Web search on/off state is preserved when switching back to `TXT` mode
 
 ### v1.5 (2026-04-13)
 - Migrated from Tavily API to Wikipedia API (`WikipediaSearchService.kt`)
