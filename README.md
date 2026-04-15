@@ -1,419 +1,237 @@
-# Ghost v1.0
+# Ghost v1.5
 
-## What is Ghost?
+Privacy-first on-demand screen analysis for Android 16 / Samsung One UI 8.0
 
-Ghost is a privacy-first, on-demand screen analysis assistant for Samsung Galaxy S25+ (Android 16 / One UI 8.0). Triggered by double-tapping the Side Key, it captures your screen and provides instant AI-powered insights through a floating Pip-Boy-style Picture-in-Picture window—completely offline.
+## Overview
+
+Ghost is a side-loaded Android application that provides instant screen analysis using a locally-hosted LLM (Gemma 4 E2B). It captures your screen on-demand, analyzes the content using on-device AI running on Hexagon NPU/GPU, and streams the answer back - all without any network access.
 
 ### Key Features
 
-- **Iris Mechanical Mascot**: Bracket-shaped mechanical eyes with cursor-tracking pupils, mechanical servo LED-bar eyebrows, and 7 expressive states (IDLE, LISTENING, FOCUSED, THINKING, ANALYZING, SUCCESS, CONFUSED)
-- **Pip-Boy Terminal Interface**: Compact 260dp×380dp wrist-mounted industrial terminal with heavy CRT scanlines, VT323 font, metallic bolts, and phosphor green glow
-- **HAL 9000 Voice Synthesis**: Piper TTS integration with a morphing Play/HAL button that pulses in HAL's iconic staccato rhythm (short-short-long)
-- **Visual / Text Mode Toggle**: Switch between vision (screenshot + text) and text-only assistant modes. **TEXT mode is default** while LiteRT-LM multimodal support is pending.
-- **Optional Web Search**: Tavily API integration with opt-in globe toggle (1,000 free credits/month)
-- **SmartSearch Pipeline**: 3-stage hybrid search — relevance scoring, context compression, and adversarial fact-checking using local Gemma 4 E2B
-- **Zero Network Access**: All processing happens locally on your device's NPU (internet only used for optional Tavily)
-- **Zero Data Retention**: Screenshots exist only in memory, never stored
-- **Zero Background Drain**: No services running when closed—trigger only when needed
+- 🔒 **Privacy-First**: All LLM inference is local on Hexagon NPU/GPU
+- ⚡ **Hardware Accelerated**: Uses Hexagon NPU with GPU fallback
+- 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
+- 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
+- 🌐 **Optional Web Search**: Wikipedia API via MediaWiki (no API key required). Full article injected into prompt
+- 🔋 **Zero Background Drain**: No services, no notifications when closed
+- 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
----
+## Requirements
 
-## Quick Start
+### Device
+- Samsung Galaxy S25+ (or equivalent Android 16 device)
+- One UI 8.0 / Android 16 (API 36+)
+- 12GB RAM recommended
+- Hexagon NPU support
 
-### Build from Source
+### Model File
+Before using Ghost, you must place the model file:
+
+```
+Internal Storage/Download/GhostModels/gemma-4-e2b.litertlm
+```
+
+The file should be approximately 2.5GB. The app will not function without it.
+
+## Installation
+
+### 1. Build from Source
 
 ```bash
 cd ghost
 ./gradlew assembleRelease
 ```
 
-### Install
+### 2. Install APK
 
 ```bash
 adb install app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-### First Launch
+Or manually copy the APK to your device and install via file manager.
 
-1. Grant **Storage** permission (for model file access)
-2. Enable **Ghost Accessibility Service** in Settings
-3. Double-tap the **Side Key** to activate
-4. Type `>` followed by your command in the terminal line
+### 3. Grant Permissions
 
----
+On first launch, the app will redirect you to system settings to grant:
+- **All files access** (for reading the model file)
+- **Display over other apps** (for the floating PiP window)
 
-## How It Works
+### 4. Place Model File
 
-### Trigger Flow
+Copy `gemma-4-e2b.litertlm` to `Internal Storage/Download/GhostModels/`
 
-1. **Double-tap Side Key** → Accessibility Service captures silent screenshot
-2. **Iris awakens** → Mechanical eyes transition from IDLE to LISTENING
-3. **Type your command** → Pupils track cursor; brackets morph to FOCUSED state
-4. **Press ⏎ Execute** → Iris enters THINKING/ANALYZING with scanning animations
-5. **Receive response** → SUCCESS state with satisfying checkmark pupils
+## Usage
 
-### Iris Expression States
+### Trigger
+1. Double-tap the Side Key (configurable in system settings)
+2. Select "Ghost" as the target app
 
-| State | Visual | Trigger |
-|-------|--------|---------|
-| **IDLE** | Slow mechanical blink, breathing scale, brows horizontal/dim | App open, awaiting input |
-| **LISTENING** | Pupils track cursor X position, brows raised 15° with cursor-driven asymmetry | User typing |
-| **FOCUSED** | Vertical line pupils, sharpened brackets, brows angled down 20° (intense V) | Paused typing |
-| **THINKING** | Sweeping scan animation, tilted brackets, left brow raised 30° (quizzical) | Execute pressed |
-| **ANALYZING** | Solid bar pupils, rapid glow pulse, brows low and serious (-15°) | Inference active |
-| **SUCCESS** | Checkmark ✓ pupils, satisfied nod, brows raised 25° with bright pulse | Response complete |
-| **CONFUSED** | Question mark ?, rapid 3× blink, brows wave alternately in perplexed motion | Error state |
+### Flow
+1. **Permission Dialog**: System asks for screen capture permission
+2. **Capture**: Single frame is captured (1280×720)
+3. **PiP Window**: Floating terminal appears with Iris and mode toggle
+4. **Select Mode**: `TXT` (default) for text-only, `VIS` for screenshot analysis
+5. **Toggle Web Search** (optional): Tap globe 🌐 to enable Wikipedia search
+6. **Ask**: Type your question about the screen content
+7. **Analyze**: Local LLM processes the query and streams the answer
+8. **Close**: Tap × or swipe off-screen to dismiss
 
-### Pip-Boy Terminal UI
+## Architecture
 
-| Element | Description |
-|---------|-------------|
-| **Window** | 260dp × 380dp, anchored top-right (120dp from top) |
-| **Frame** | Industrial housing with 4 metallic bolt heads, 2dp square corners |
-| **Font** | VT323 terminal font, 24sp for body text |
-| **CRT Effects** | 40% opacity scanlines, vignette darkening, phosphor bloom |
-| **Header** | 40×24dp Iris with servo eyebrows + tabs `[VISUAL] [DATA] [STAT]` |
-| **Mode Toggle** | `TXT` / `VIS` button next to Iris. TXT highlighted by default |
-| **Net Toggle** | Globe icon 🌐 between mode toggle and Play/HAL. Gray + X = offline. Green = web search enabled |
-| **Play/HAL Button** | Morphing terminal play button (⏵) ↔ pulsing red HAL 9000 eye |
-| **Terminal** | Line-numbered response area (01, 02, 03...) + flat `>` command line |
-| **Cursor** | Blinking block `█` cursor |
+```
+GhostActivity (Entry Point)
+├── MediaProjectionManager → Capture single Bitmap (1280×720)
+├── LiteRT-LM Inference Engine
+│   ├── Model Loader (/storage/emulated/0/Download/GhostModels/)
+│   ├── HexagonNpuDelegate (primary) / GpuDelegate (fallback)
+│   ├── WikipediaSearchService (MediaWiki API client, no key needed)
+│   └── AsyncTokenGenerator (streaming responses)
+├── WindowManager Overlay (TYPE_APPLICATION_OVERLAY)
+│   ├── 340dp×600dp PiP window
+│   ├── Jetpack Compose UI (Material3 dark theme)
+│   └── Draggable + dismissible
+└── MemoryManager (aggressive cleanup on close)
+```
 
----
+## Memory Budget
 
-## Project Structure
+| Component | Memory |
+|-----------|--------|
+| Model footprint | ~2.5GB (memory-mapped) |
+| App + Compose overhead | ~400MB |
+| Bitmap buffers | ~10MB |
+| **Total target** | **<3GB peak** |
+
+## Development
+
+### Project Structure
 
 ```
 ghost/
 ├── app/src/main/java/com/ghost/app/
-│   ├── GhostActivity.kt          # Entry point & orchestration
-│   ├── ChatActivity.kt           # Pip-Boy overlay UI
-│   ├── GhostAccessibilityService.kt  # Silent screenshot capture
+│   ├── GhostActivity.kt          # Main orchestrator
+│   ├── GhostApplication.kt       # Application class
+│   ├── capture/
+│   │   ├── ScreenCaptureManager.kt
+│   │   └── BitmapConverter.kt
+│   ├── inference/
+│   │   ├── InferenceEngine.kt
+│   │   ├── WikipediaSearchService.kt # MediaWiki API client
+│   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
+│   │   ├── ModelValidator.kt
+│   │   └── ThermalMonitor.kt
 │   ├── ui/
-│   │   ├── IrisView.kt           # Mechanical eye mascot (Canvas)
-│   │   ├── GhostInterface.kt     # Pip-Boy terminal Compose UI
-│   │   ├── GhostWindowManager.kt # Window management
-│   │   └── theme/                # Terminal colors & VT323 typography
-│   └── inference/
-│       ├── InferenceEngine.kt    # LiteRT-LM integration
-│       ├── SmartSearchPipeline.kt # 3-stage Tavily + local LLM pipeline
-│       ├── TavilySearchService.kt # Tavily API client
-│       └── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
-├── app/src/main/res/font/
-│   ├── vt323_regular.ttf         # VT323 terminal font
-│   └── xanti_typewriter_regular.ttf  # Legacy typewriter font
-└── build.gradle.kts
+│   │   ├── GhostWindowManager.kt
+│   │   ├── GhostInterface.kt
+│   │   └── DragHandler.kt
+│   └── utils/
+│       ├── GhostPaths.kt
+│       ├── MemoryManager.kt
+│       └── PermissionChecker.kt
+├── scripts/
+│   └── convert_hal_model.py      # Desktop Piper → Sherpa-ONNX converter
+└── ...
 ```
 
----
+### Build Configuration
 
-## Technical Specifications
+- **compileSdk**: 36
+- **minSdk**: 36 (Android 16 only)
+- **targetSdk**: 36
+- **NDK**: 27.0.12077973
+- **ABI**: arm64-v8a only
 
-| Spec | Value |
-|------|-------|
-| **Target** | Android 16 (API 36) / One UI 8.0 |
-| **Architecture** | arm64-v8a |
-| **PiP Window** | 260dp × 380dp, right-edge anchored, 120dp from top |
-| **Font** | VT323 terminal font (24sp body) |
-| **Colors** | Phosphor green `#39FF14` on gunmetal `#0A0F0A` |
-| **Animation** | Spring physics (stiffness 300, damping 0.8) |
-| **LLM** | Gemma 4 E2B via LiteRT-LM `0.10.0` |
+### Key Dependencies
 
----
+- `com.google.ai.edge.litert:litert-support-api:1.2.0`
+- `com.google.ai.edge.litert:litert-gpu:1.2.0`
+- `com.google.ai.edge.litert:litert-hexagon-npu:1.2.0`
+- `androidx.compose.material3:material3:1.3.0`
 
-## Implementation Instructions
+## Permissions
 
-When `litertlm:0.11.0` (or latest available) is released on Maven, follow these steps:
+| Permission | Purpose | Required |
+|------------|---------|----------|
+| `MANAGE_EXTERNAL_STORAGE` | Read 2.5GB model file | Yes |
+| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Screen capture on Android 16 | Yes |
+| `SYSTEM_ALERT_WINDOW` | Floating PiP window | Yes |
+| `INTERNET` | Optional Wikipedia web search API | No (offline mode works without it) |
 
-### 1. Update `build.gradle.kts`
+## Troubleshooting
 
-```kotlin
-// BEFORE:
-implementation("com.google.ai.edge.litertlm:litertlm-android:0.10.0")
+### "Model not found" error
+Ensure `gemma-4-e2b.litertlm` is placed in `Internal Storage/Download/GhostModels/`
 
-// AFTER (check Maven for latest version):
-implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
-```
-
-### 2. Update `InferenceEngine.kt`
-
-**Import changes:**
-```kotlin
-// BEFORE:
-import com.google.ai.edge.litert.*
-
-// AFTER:
-import com.google.ai.edge.litertlm.*
-```
-
-**Class changes:**
-```kotlin
-// BEFORE:
-private var llmInference: LlmInference? = null
-
-// AFTER:
-private var engine: Engine? = null
-private var conversation: Conversation? = null
-```
-
-**Initialization changes:**
-```kotlin
-// BEFORE:
-val options = LlmInference.Options.builder()
-    .setModelPath(modelPath)
-    .setPreferredBackend(LlmInference.Backend.CPU) // or GPU, NPU
-    .build()
-llmInference = LlmInference.create(context, options)
-
-// AFTER:
-engine = Engine.create(context)
-conversation = engine?.newConversation(modelPath)
-```
-
-**Inference changes:**
-```kotlin
-// BEFORE (text-only):
-llmInference?.generateAsync(prompt)
-
-// AFTER (multimodal with image):
-val tempFile = saveBitmapToTempFile(bitmap)
-val contents = Contents.of(
-    Content.ImageFile(tempFile),
-    Content.Text(query)
-)
-conversation?.sendMessage(contents)
-```
-
-### 3. Add Bitmap-to-File Helper
-
-```kotlin
-private fun saveBitmapToTempFile(bitmap: Bitmap): File {
-    val tempFile = File.createTempFile("screenshot", ".jpg", context.cacheDir)
-    FileOutputStream(tempFile).use { out ->
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-    }
-    return tempFile
-}
-```
-
-### 4. Add Cleanup
-
-Delete temp file after inference:
-```kotlin
-.onComplete { 
-    tempFile.delete()
-}
-.onError { 
-    tempFile.delete()
-}
-```
-
-### 5. Keep Unchanged
-
-- All UI code (`GhostInterface.kt`, `IrisView.kt`, `ChatActivity.kt`)
-- PiP logic (`GhostWindowManager.kt`)
-- AccessibilityService (`GhostAccessibilityService.kt`)
-- Model path handling (`GhostPaths.kt`)
-- SmartSearchPipeline (`SmartSearchPipeline.kt`)
-
----
-
-## Visual vs Text Mode
-
-Ghost now supports both visual (multimodal) and text-only inference:
-
-| Mode | Behavior | Default |
-|------|----------|---------|
-| **TEXT** | Pure text assistant. No screenshot required. Works immediately. | ✅ Yes |
-| **VISUAL** | Sends screenshot to model for image analysis. Requires valid bitmap. | Manual toggle |
-
-### Why TEXT is default
-The vision API in LiteRT-LM `0.10.0` is non-functional for multimodal input. TEXT mode lets Ghost work as a fully capable text-only assistant today. When `0.11.0` fixes vision support, tap the toggle to switch to VIS mode.
-
-### UI indicator
-The terminal response area displays:
-- `[TEXT MODE]` — when in text mode
-- `[VISUAL MODE - NO SCREENSHOT]` — when visual mode is on but no bitmap is available
-
----
-
-## Web Search (Optional)
-
-Ghost can enhance local LLM responses with real-time web search via **Tavily API**.
-
-| Feature | Status |
-|---------|--------|
-| **Default state** | OFF (privacy-first) |
-| **Toggle** | Globe icon 🌐 in header |
-| **Credits** | Free tier: 1,000 searches/month (resets 1st of month) |
-| **Architecture** | Search results injected into local Gemma prompt |
-| **Privacy** | Only query text sent to Tavily. Screenshot stays local. |
-
-### Setup
-
-1. Sign up at https://app.tavily.com (no credit card required)
-2. Get API key (starts with `tvly-...`)
-3. Create a file on your device at:
-   ```
-   /storage/emulated/0/Download/GhostModels/tavily_key.txt
-   ```
-   Paste your API key into this file (no quotes, no extra lines).
-4. Build and install
-
-### Usage
-
-- Tap gray globe (with X) → Turns green, enables web search
-- First search shows "Remaining: XXX" indicator below header
-- Credits display color: Green (>500), Amber (200-500), Red (<200)
-- Toggle OFF → Indicator disappears, purely offline mode
-
-### Architecture
-
-Ghost uses a **SmartSearchPipeline** when web search is enabled:
-
-1. **Initial Tavily Search** — Fetches raw web results (1 credit)
-2. **Relevance Scoring** — Local Gemma 4 E2B scores each result 0-10
-3. **Conditional Re-query** — If all scores < 5, performs a refined search (+1 credit)
-4. **Context Compression** — Local Gemma extracts only the top-2 most relevant facts
-5. **Draft + Verify** — Local Gemma drafts an answer, then another local call verifies it (`VERIFIED` / `UNSUPPORTED`)
-6. **Result** — Verified answer is streamed back. If verification fails, answer is prefixed with `[Unverified]`
-
-**Why this is better:**
-- Tavily's AI-generated `answer` field is **ignored** — it was found to contain outdated/hallucinated info (e.g., saying Biden is president in 2026)
-- Only raw search snippets are used, scored, compressed, and verified by the local model
-- Screenshot stays local; only query text goes to Tavily
-
-**Privacy:** Only the text query leaves the device. All LLM inference, synthesis, and verification happens locally on the NPU/GPU.
-
----
-
-## HAL 9000 Voice Synthesis (Piper TTS)
-
-Ghost now integrates **Sherpa-ONNX** for local Piper TTS inference.
-
-### Prerequisites
-
-Before HAL can speak, the raw Piper model must be **converted**. You can do this on a desktop machine **or directly on your phone via Termux**.
-
-#### Option A: Desktop Conversion
-
-1. **Run the conversion script** (requires Python):
+### HAL 9000 voice not playing
+1. **Ensure you converted the model.** If you don't have a desktop, use **Google Colab** in your phone browser (see `README.md` for the notebook script).
    ```bash
-   cd /path/to/Ghost
+   # Desktop (reliable)
    pip install onnx==1.17.0
-   python3 scripts/convert_hal_model.py /path/to/your/model/dir
+   python3 scripts/convert_hal_model.py /path/to/model/dir
    ```
-
-2. **Download `espeak-ng-data`**:
-   ```bash
-   cd /path/to/your/model/dir
-   wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2
-   tar xf espeak-ng-data.tar.bz2
-   ```
-
-3. **Copy to Android device** next to the Gemma model:
-   - `hal.onnx` (patched with metadata)
+2. Ensure these files are in the same folder as `hal.onnx`:
    - `hal.onnx.json`
-   - `tokens.txt` (auto-generated by script)
-   - `espeak-ng-data/` directory
+   - `tokens.txt`
+   - `espeak-ng-data/`
+3. Check logcat for `PiperTTS` initialization errors
 
-#### Option B: Google Colab on Your Phone (No Desktop Needed)
+### Permission denied
+Grant both "All files access" and "Display over other apps" in system settings
 
-If you don't have a PC, use **Google Colab** in your phone's web browser. It comes with `onnx` pre-installed.
+### Screen capture not working
+Check that no other app is currently using MediaProjection
 
-1. Open **Chrome** and go to: https://colab.research.google.com
-2. Tap **"New notebook"**
-3. Run these two cells:
+### Thermal throttling
+Device will automatically switch from NPU to GPU if it gets warm
 
-**Cell 1 — Install dependency:**
-```python
-!pip install onnx==1.17.0
-```
+## Safety & Privacy
 
-**Cell 2 — Upload files:**
-```python
-from google.colab import files
-uploaded = files.upload()  # Upload hal.onnx and hal.onnx.json
-```
-
-**Cell 3 — Convert:**
-```python
-import json, os
-from typing import Any, Dict
-import onnx
-
-def add_meta_data(filename, meta_data):
-    model = onnx.load(filename)
-    while len(model.metadata_props):
-        model.metadata_props.pop()
-    for key, value in meta_data.items():
-        meta = model.metadata_props.add()
-        meta.key = key
-        meta.value = str(value)
-    onnx.save(model, filename)
-
-config = json.load(open("hal.onnx.json"))
-
-# Generate tokens.txt
-with open("tokens.txt", "w", encoding="utf-8") as f:
-    for symbol, ids in config["phoneme_id_map"].items():
-        f.write(f"{symbol} {ids[0]}\n")
-
-sample_rate = config["audio"]["sample_rate"]
-if sample_rate == 22500:
-    sample_rate = 22050
-
-meta_data = {
-    "model_type": "vits",
-    "comment": "piper",
-    "language": config.get("language", {}).get("code", "en-us").split("-")[0],
-    "voice": config.get("espeak", {}).get("voice", "en-us"),
-    "has_espeak": 1,
-    "n_speakers": config.get("num_speakers", 1),
-    "sample_rate": sample_rate,
-}
-add_meta_data("hal.onnx", meta_data)
-print("Conversion complete!")
-files.download("hal.onnx")
-files.download("tokens.txt")
-```
-
-4. Download the patched `hal.onnx` and `tokens.txt` to your phone.
-5. In Termux, download `espeak-ng-data`:
-   ```bash
-   cd /storage/emulated/0/Download/GhostModels
-   wget https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2
-   tar xf espeak-ng-data.tar.bz2
-   rm espeak-ng-data.tar.bz2
-   ```
-6. Ensure `hal.onnx`, `hal.onnx.json`, `tokens.txt`, and `espeak-ng-data/` are all in `/storage/emulated/0/Download/GhostModels/`.
-
-#### Option C: Termux (Advanced — Often Fails)
-
-> **Warning:** `pip install onnx` must compile C++ extensions. This **almost always fails on Android/Termux**. Only try this if Options A and B are impossible.
-
-```bash
-pkg update
-pkg install -y python wget tar clang cmake make python-numpy python-pip
-# The next line usually fails:
-pip install --no-cache-dir onnx==1.17.0
-```
-
-If the pip install succeeds, continue with the script from Option A. If it fails, you **must** use Option B (Google Colab).
-
-### How it works
-
-- Tap the **⏵** button → it morphs into a pulsing red **HAL 9000 eye**
-- Sherpa-ONNX runs inference on a background thread
-- Generated audio is saved as a WAV file and played via `MediaPlayer`
-- Tap again to stop playback
-
-### Why conversion is needed
-
-Sherpa-ONNX requires the ONNX file to contain a `"comment": "piper"` metadata property so it routes inference through the correct VITS code path. The conversion script also generates `tokens.txt` from the JSON `phoneme_id_map`. This cannot be done on-device because Android lacks the ONNX Python library.
-
----
+- **No data leaves the device by default**: INTERNET permission is only used for optional Wikipedia web search. All LLM inference is local.
+- **No background activity**: App fully terminates when PiP is closed
+- **No persistent storage**: Screenshots are held in memory only
+- **No analytics/telemetry**: Zero external communication
 
 ## License
 
 Private use only. Not for redistribution.
+
+## Version History
+
+### v1.5 (2026-04-13)
+- Migrated from Tavily API to Wikipedia API (`WikipediaSearchService.kt`)
+  - No API key required; always available when internet is present
+  - Fetches full article text via MediaWiki `extracts` API
+  - Injects full article into LLM prompt with critical formatting instruction
+- Removed `SmartSearchPipeline.kt`, `TavilySearchService.kt`, and credit tracking UI
+- Simplified web search path: single Wikipedia fetch → local LLM inference
+
+### v1.4 (2026-04-13)
+- Added `SmartSearchPipeline` — 3-stage hybrid web search (Tavily)
+- Added file-based debug logging to `GhostModels/debug_log.txt`
+
+### v1.3 (2026-04-13)
+- Added Tavily web search integration (now removed in v1.5)
+
+### v1.2 (2026-04-13)
+- Added Visual/Text mode toggle in terminal header (`TXT` / `VIS`)
+- **TEXT mode is default** — works without screenshot while LiteRT-LM vision API is broken
+- Updated `InferenceEngine.kt` with `analyze()` supporting both text-only and visual modes
+- Mode indicator in response area (`[TEXT MODE]` / `[VISUAL MODE - NO SCREENSHOT]`)
+- Toggle persists for the session; HAL TTS works in both modes
+
+### v1.1 (2026-04-13)
+- Added Sherpa-ONNX Piper TTS integration (`PiperTTS.kt`) for HAL 9000 voice synthesis
+- Replaced holotape thumbnail with morphing Play/HAL button in terminal header
+- HAL 9000 red-eye pulse animation with staccato rhythm (short-short-long)
+- Auto-parses `hal.onnx.json` config and generates `tokens.txt` on-device
+- Added desktop conversion script (`scripts/convert_hal_model.py`) for ONNX metadata patching
+- TTS lifecycle integrated into `ChatActivity`
+
+### v1.0 (2024-XX-XX)
+- Initial release
+- MediaProjection screen capture
+- LiteRT-LM local inference
+- Hexagon NPU support with GPU fallback
+- Floating PiP Compose UI
+- Thermal monitoring
+# Build Sat Apr 13 20:10:00 UTC 2026
