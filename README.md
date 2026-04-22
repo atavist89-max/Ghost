@@ -1,5 +1,10 @@
 # Ghost v1.5
 
+> ⚠️ **PLACEHOLDER IMPLEMENTATION** ⚠️  
+> This is a placeholder UI implementation until the correct API is released. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual LLM inference. The production API integration is pending final SDK release.
+
+---
+
 Privacy-first on-demand screen analysis for Android 16 / Samsung One UI 8.0
 
 ## Overview
