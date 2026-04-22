@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,6 +84,9 @@ fun GhostInterface(
     isNotificationMode: Boolean = false,
     onNotificationToggle: (Boolean) -> Unit = {},
     notificationCutoffLabel: String? = null,
+    availableNotificationApps: List<String> = emptyList(),
+    excludedNotificationApps: Set<String> = emptySet(),
+    onNotificationAppSelectionChange: (Set<String>) -> Unit = {},
     userQuery: String? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
@@ -202,6 +206,15 @@ fun GhostInterface(
             )
 
             Spacer(modifier = Modifier.height(4.dp))
+
+            // App filter dropdown (notification mode only)
+            if (isNotificationMode && availableNotificationApps.isNotEmpty()) {
+                AppFilterDropdown(
+                    apps = availableNotificationApps,
+                    excludedApps = excludedNotificationApps,
+                    onExcludedChange = onNotificationAppSelectionChange
+                )
+            }
 
             // Terminal response area with line numbers
             TerminalResponseArea(
@@ -617,6 +630,108 @@ private fun BellToggle(
             fontSize = 16.sp,
             color = if (isNotificationMode) PhosphorGreen else PhosphorDim.copy(alpha = 0.4f)
         )
+    }
+}
+
+@Composable
+private fun AppFilterDropdown(
+    apps: List<String>,
+    excludedApps: Set<String>,
+    onExcludedChange: (Set<String>) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+    ) {
+        // Expand/collapse header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 1.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (expanded) "▲" else "▼",
+                fontFamily = VT323,
+                fontSize = 10.sp,
+                color = PhosphorDim
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            val includedCount = apps.size - excludedApps.size
+            Text(
+                text = "Apps $includedCount/${apps.size}",
+                fontFamily = VT323,
+                fontSize = 10.sp,
+                color = PhosphorDim.copy(alpha = 0.7f)
+            )
+        }
+
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 100.dp)
+                    .verticalScroll(scrollState)
+            ) {
+                apps.forEach { app ->
+                    val isChecked = app !in excludedApps
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val newExcluded = if (isChecked) {
+                                    excludedApps + app
+                                } else {
+                                    excludedApps - app
+                                }
+                                onExcludedChange(newExcluded)
+                            }
+                            .padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .border(
+                                    1.dp,
+                                    if (isChecked) PhosphorGreen.copy(alpha = 0.6f) else PhosphorDim.copy(alpha = 0.4f),
+                                    RoundedCornerShape(1.dp)
+                                )
+                                .background(
+                                    if (isChecked) PhosphorGreen.copy(alpha = 0.25f) else Color.Transparent,
+                                    RoundedCornerShape(1.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isChecked) {
+                                Text(
+                                    text = "✓",
+                                    fontSize = 7.sp,
+                                    color = PhosphorGreen,
+                                    lineHeight = 8.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = app,
+                            fontFamily = VT323,
+                            fontSize = 10.sp,
+                            color = if (isChecked) TextPhosphor else TextPhosphorDim.copy(alpha = 0.35f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

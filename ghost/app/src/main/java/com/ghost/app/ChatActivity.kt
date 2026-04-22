@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.inference.PiperTTS
+import com.ghost.app.notification.NotificationPrefs
 import com.ghost.app.notification.NotificationRepository
 import com.ghost.app.ui.GhostInterface
 import java.time.LocalDate
@@ -86,6 +87,8 @@ class ChatActivity : ComponentActivity() {
     private val _notificationHistory = mutableStateOf<String?>(null)
     private val _notificationCutoffLabel = mutableStateOf<String?>(null)
     private val _lastUserQuery = mutableStateOf("")
+    private val _availableNotificationApps = mutableStateOf<List<String>>(emptyList())
+    private val _excludedNotificationApps = mutableStateOf<Set<String>>(emptySet())
     private var notificationRepository: NotificationRepository? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,6 +120,19 @@ class ChatActivity : ComponentActivity() {
 
         // Initialize notification repository for historian feature
         notificationRepository = NotificationRepository(this)
+
+        // Load persisted app filter and available apps from DB
+        _excludedNotificationApps.value = NotificationPrefs.loadExcludedApps(this)
+        mainScope.launch(Dispatchers.IO) {
+            try {
+                val apps = notificationRepository!!.getDistinctAppLabels()
+                withContext(Dispatchers.Main) {
+                    _availableNotificationApps.value = apps
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load app labels", e)
+            }
+        }
 
         // 60-day cap cleanup — runs exactly once per PiP session (requirement 7)
         mainScope.launch(Dispatchers.IO) {
@@ -155,14 +171,15 @@ class ChatActivity : ComponentActivity() {
                             _responseText.value = ""
                             mainScope.launch(Dispatchers.IO) {
                                 try {
-                                    val totalCount = notificationRepository!!.getTotalCount()
+                                    val excluded = _excludedNotificationApps.value.toList()
+                                    val totalCount = notificationRepository!!.getTotalCount(excluded)
                                     if (totalCount == 0) {
                                         withContext(Dispatchers.Main) {
                                             _notificationCutoffLabel.value = "🔔 No notifications logged"
                                             _isNotificationMode.value = true
                                         }
                                     } else {
-                                        val allEntries = notificationRepository!!.getAllNotifications()
+                                        val allEntries = notificationRepository!!.getAllNotifications(excluded)
                                         val result = notificationRepository!!.applyDayBoundaryFilter(allEntries)
                                         val label = buildNotificationLabel(
                                             result.totalMatches,
@@ -189,6 +206,42 @@ class ChatActivity : ComponentActivity() {
                         }
                     },
                     notificationCutoffLabel = _notificationCutoffLabel.value,
+                    availableNotificationApps = _availableNotificationApps.value,
+                    excludedNotificationApps = _excludedNotificationApps.value,
+                    onNotificationAppSelectionChange = { excluded ->
+                        _excludedNotificationApps.value = excluded
+                        NotificationPrefs.saveExcludedApps(this, excluded)
+                        // Refresh preview if already in notification mode
+                        if (_isNotificationMode.value) {
+                            mainScope.launch(Dispatchers.IO) {
+                                try {
+                                    val excludedList = excluded.toList()
+                                    val totalCount = notificationRepository!!.getTotalCount(excludedList)
+                                    if (totalCount == 0) {
+                                        withContext(Dispatchers.Main) {
+                                            _notificationCutoffLabel.value = "🔔 No notifications logged"
+                                            _notificationHistory.value = ""
+                                        }
+                                    } else {
+                                        val allEntries = notificationRepository!!.getAllNotifications(excludedList)
+                                        val result = notificationRepository!!.applyDayBoundaryFilter(allEntries)
+                                        val label = buildNotificationLabel(
+                                            result.totalMatches,
+                                            result.analyzedCount,
+                                            result.cutoffDate
+                                        )
+                                        val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                                        withContext(Dispatchers.Main) {
+                                            _notificationHistory.value = historyText
+                                            _notificationCutoffLabel.value = label
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to refresh on app filter change", e)
+                                }
+                            }
+                        }
+                    },
                     userQuery = _lastUserQuery.value,
                     onSendQuery = { query ->
                         if (_isNetEnabled.value && _responseText.value.contains("WEB SEARCH ERROR")) {
@@ -270,6 +323,7 @@ class ChatActivity : ComponentActivity() {
             useWebSearch = useNetSearch,
             useNotificationHistory = _isNotificationMode.value,
             notificationHistory = _notificationHistory.value,
+            excludedNotificationApps = _excludedNotificationApps.value.toList(),
             onToken = { token ->
                 mainScope.launch {
                     _responseText.value += token
@@ -354,6 +408,9 @@ private fun ChatScreenPiP(
     isNotificationMode: Boolean = false,
     onNotificationToggle: (Boolean) -> Unit = {},
     notificationCutoffLabel: String? = null,
+    availableNotificationApps: List<String> = emptyList(),
+    excludedNotificationApps: Set<String> = emptySet(),
+    onNotificationAppSelectionChange: (Set<String>) -> Unit = {},
     userQuery: String? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
@@ -430,6 +487,9 @@ private fun ChatScreenPiP(
                     isNotificationMode = isNotificationMode,
                     onNotificationToggle = onNotificationToggle,
                     notificationCutoffLabel = notificationCutoffLabel,
+                    availableNotificationApps = availableNotificationApps,
+                    excludedNotificationApps = excludedNotificationApps,
+                    onNotificationAppSelectionChange = onNotificationAppSelectionChange,
                     userQuery = userQuery,
                     onSendQuery = onSendQuery,
                     onClose = onClose

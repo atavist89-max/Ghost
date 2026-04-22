@@ -187,6 +187,7 @@ class InferenceEngine(private val context: Context) {
         useWebSearch: Boolean = false,
         useNotificationHistory: Boolean = false,
         notificationHistory: String? = null,
+        excludedNotificationApps: List<String> = emptyList(),
         onToken: (String) -> Unit,
         onComplete: () -> Unit,
         onError: (String) -> Unit,
@@ -241,7 +242,7 @@ class InferenceEngine(private val context: Context) {
                         useNotificationHistory -> {
                             val keywords = KeywordExtractor.extract(query)
                             val matched = withContext(Dispatchers.IO) {
-                                notificationRepository.searchByKeywords(keywords)
+                                notificationRepository.searchByKeywords(keywords, excludedNotificationApps)
                             }
                             if (matched.isEmpty()) {
                                 mainScope.launch {

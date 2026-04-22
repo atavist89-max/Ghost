@@ -48,6 +48,7 @@ data class DayBoundaryFilterResult(
  * - Day-boundary greedy filter operates on matched results, not full table
  * - 60-day cleanup (triggered by PiP startup only)
  * - Post-query destructive delete after successful LLM response
+ * - Per-app exclusion filter persisted across sessions
  */
 class NotificationRepository(context: Context) {
 
@@ -61,11 +62,18 @@ class NotificationRepository(context: Context) {
     private val database = NotificationDatabase(context)
 
     /**
-     * Returns the total number of notifications in the database.
+     * Returns the total number of notifications in the database,
+     * optionally excluding apps in [excludedAppLabels].
      */
-    fun getTotalCount(): Int {
+    fun getTotalCount(excludedAppLabels: List<String> = emptyList()): Int {
         val db = database.readableDatabase
-        db.rawQuery("SELECT COUNT(*) FROM ${NotificationDatabase.TABLE_NOTIFICATIONS}", null).use { cursor ->
+        val query = if (excludedAppLabels.isNotEmpty()) {
+            val placeholders = excludedAppLabels.joinToString(",") { "?" }
+            "SELECT COUNT(*) FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE ${NotificationDatabase.COL_APP_LABEL} NOT IN ($placeholders)"
+        } else {
+            "SELECT COUNT(*) FROM ${NotificationDatabase.TABLE_NOTIFICATIONS}"
+        }
+        db.rawQuery(query, if (excludedAppLabels.isNotEmpty()) excludedAppLabels.toTypedArray() else null).use { cursor ->
             if (cursor.moveToFirst()) {
                 return cursor.getInt(0)
             }
@@ -74,15 +82,36 @@ class NotificationRepository(context: Context) {
     }
 
     /**
-     * Loads ALL notifications from the database, newest first.
+     * Returns all distinct app labels present in the database, sorted A-Z.
      */
-    suspend fun getAllNotifications(): List<NotificationEntry> = withContext(Dispatchers.IO) {
+    fun getDistinctAppLabels(): List<String> {
         val db = database.readableDatabase
-        val entries = mutableListOf<NotificationEntry>()
+        val labels = mutableListOf<String>()
         db.rawQuery(
-            "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC",
+            "SELECT DISTINCT ${NotificationDatabase.COL_APP_LABEL} FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} ORDER BY ${NotificationDatabase.COL_APP_LABEL} ASC",
             null
         ).use { cursor ->
+            while (cursor.moveToNext()) {
+                cursor.getString(0)?.let { if (it.isNotBlank()) labels.add(it) }
+            }
+        }
+        return labels
+    }
+
+    /**
+     * Loads ALL notifications from the database, newest first,
+     * optionally excluding apps in [excludedAppLabels].
+     */
+    suspend fun getAllNotifications(excludedAppLabels: List<String> = emptyList()): List<NotificationEntry> = withContext(Dispatchers.IO) {
+        val db = database.readableDatabase
+        val entries = mutableListOf<NotificationEntry>()
+        val query = if (excludedAppLabels.isNotEmpty()) {
+            val placeholders = excludedAppLabels.joinToString(",") { "?" }
+            "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE ${NotificationDatabase.COL_APP_LABEL} NOT IN ($placeholders) ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC"
+        } else {
+            "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC"
+        }
+        db.rawQuery(query, if (excludedAppLabels.isNotEmpty()) excludedAppLabels.toTypedArray() else null).use { cursor ->
             while (cursor.moveToNext()) {
                 entries.add(cursor.toEntry())
             }
@@ -95,24 +124,32 @@ class NotificationRepository(context: Context) {
      * Results are ordered newest-first (timestamp DESC).
      *
      * @param keywords List of keywords (must be non-empty; empty list returns empty list)
+     * @param excludedAppLabels Apps to exclude from search (empty = no exclusion)
      * @return Matching notification entries
      */
-    suspend fun searchByKeywords(keywords: List<String>): List<NotificationEntry> = withContext(Dispatchers.IO) {
+    suspend fun searchByKeywords(keywords: List<String>, excludedAppLabels: List<String> = emptyList()): List<NotificationEntry> = withContext(Dispatchers.IO) {
         if (keywords.isEmpty()) {
             return@withContext emptyList<NotificationEntry>()
         }
 
         val db = database.readableDatabase
         val args = mutableListOf<String>()
-        val conditions = keywords.map { keyword ->
+        val keywordConditions = keywords.map { keyword ->
             args.add("%$keyword%")
             args.add("%$keyword%")
             args.add("%$keyword%")
             "(${NotificationDatabase.COL_TITLE} LIKE ? OR ${NotificationDatabase.COL_BODY} LIKE ? OR ${NotificationDatabase.COL_APP_LABEL} LIKE ?)"
         }
 
-        val where = conditions.joinToString(" OR ")
-        val query = "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE $where ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC"
+        val keywordWhere = keywordConditions.joinToString(" OR ")
+
+        val query = if (excludedAppLabels.isNotEmpty()) {
+            excludedAppLabels.forEach { args.add(it) }
+            val appPlaceholders = excludedAppLabels.joinToString(",") { "?" }
+            "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE ($keywordWhere) AND ${NotificationDatabase.COL_APP_LABEL} NOT IN ($appPlaceholders) ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC"
+        } else {
+            "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE $keywordWhere ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC"
+        }
 
         val entries = mutableListOf<NotificationEntry>()
         db.rawQuery(query, args.toTypedArray()).use { cursor ->
