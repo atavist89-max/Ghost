@@ -216,7 +216,7 @@ fun GhostInterface(
                 modifier = Modifier.weight(1f)
             )
 
-            // Oldest-from label for notification mode
+            // Notification-mode status label (three-tier format)
             if (isNotificationMode && !notificationCutoffLabel.isNullOrEmpty()) {
                 Text(
                     text = notificationCutoffLabel,
@@ -243,7 +243,7 @@ fun GhostInterface(
                         irisState = IrisView.State.THINKING
                     }
                 },
-                enabled = !isGenerating && isEngineReady && !(isNotificationMode && notificationCutoffLabel == "No notifications logged"),
+                enabled = !isGenerating && isEngineReady && !(isNotificationMode && notificationCutoffLabel?.startsWith("🔔 No") == true),
                 isNotificationMode = isNotificationMode
             )
         }

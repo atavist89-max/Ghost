@@ -32,8 +32,10 @@ import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.inference.PiperTTS
 import com.ghost.app.notification.NotificationRepository
-
 import com.ghost.app.ui.GhostInterface
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
 import com.ghost.app.utils.DebugLogger
@@ -116,6 +118,16 @@ class ChatActivity : ComponentActivity() {
         // Initialize notification repository for historian feature
         notificationRepository = NotificationRepository(this)
 
+        // 60-day cap cleanup — runs exactly once per PiP session (requirement 7)
+        mainScope.launch(Dispatchers.IO) {
+            try {
+                val deleted = notificationRepository!!.cleanupOldNotifications()
+                Log.i(TAG, "PiP startup cleanup deleted $deleted old notifications")
+            } catch (e: Exception) {
+                Log.e(TAG, "Cleanup failed", e)
+            }
+        }
+
         // Initialize TTS (HAL model already in models folder with Gemma)
         piperTTS = PiperTTS(this).apply {
             val initialized = initialize()
@@ -143,11 +155,26 @@ class ChatActivity : ComponentActivity() {
                             _responseText.value = ""
                             mainScope.launch(Dispatchers.IO) {
                                 try {
-                                    val (history, label) = notificationRepository!!.loadPrefiltered()
-                                    withContext(Dispatchers.Main) {
-                                        _notificationHistory.value = history
-                                        _notificationCutoffLabel.value = label
-                                        _isNotificationMode.value = true
+                                    val totalCount = notificationRepository!!.getTotalCount()
+                                    if (totalCount == 0) {
+                                        withContext(Dispatchers.Main) {
+                                            _notificationCutoffLabel.value = "🔔 No notifications logged"
+                                            _isNotificationMode.value = true
+                                        }
+                                    } else {
+                                        val allEntries = notificationRepository!!.getAllNotifications()
+                                        val result = notificationRepository!!.applyDayBoundaryFilter(allEntries)
+                                        val label = buildNotificationLabel(
+                                            result.totalMatches,
+                                            result.analyzedCount,
+                                            result.cutoffDate
+                                        )
+                                        val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                                        withContext(Dispatchers.Main) {
+                                            _notificationHistory.value = historyText
+                                            _notificationCutoffLabel.value = label
+                                            _isNotificationMode.value = true
+                                        }
                                     }
                                 } catch (e: Exception) {
                                     withContext(Dispatchers.Main) {
@@ -197,6 +224,17 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
+    private fun buildNotificationLabel(totalMatches: Int, analyzedCount: Int, cutoffDate: LocalDate?): String {
+        return when {
+            totalMatches == 0 -> "🔔 No notifications logged"
+            analyzedCount == totalMatches -> "🔔 $totalMatches matches | All analyzed"
+            else -> {
+                val dateStr = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US).format(cutoffDate)
+                "🔔 $totalMatches matches | $analyzedCount analyzed | Back to: $dateStr"
+            }
+        }
+    }
+
     private fun handleQuery(query: String, useVisualMode: Boolean, useNetSearch: Boolean) {
         Log.i(TAG, "User query: $query (visualMode=$useVisualMode, netSearch=$useNetSearch)")
         DebugLogger.i(TAG, "User query: $query (visualMode=$useVisualMode, netSearch=$useNetSearch)")
@@ -240,6 +278,9 @@ class ChatActivity : ComponentActivity() {
             onComplete = {
                 mainScope.launch {
                     _isGenerating.value = false
+                    if (_isNotificationMode.value && _responseText.value.trim() == "No matching notifications found in your history.") {
+                        _notificationCutoffLabel.value = "🔔 No matches found"
+                    }
                     DebugLogger.i(TAG, "Inference complete")
                 }
             },

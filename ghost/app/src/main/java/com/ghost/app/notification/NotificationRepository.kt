@@ -6,10 +6,12 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 /**
  * Data class representing a single notification row.
@@ -29,15 +31,23 @@ data class NotificationEntry(
 )
 
 /**
+ * Result of applying the day-boundary greedy token filter on a list of notifications.
+ */
+data class DayBoundaryFilterResult(
+    val analyzedEntries: List<NotificationEntry>,
+    val cutoffDate: LocalDate?,
+    val totalMatches: Int,
+    val analyzedCount: Int
+)
+
+/**
  * Repository for querying notification history with token-budget pre-filtering.
  *
- * Phase C+D — Bell Press (MERGED):
- * - Queries all notifications from SQLite
- * - Groups by calendar day (full day, 00:00:00 boundary)
- * - Iterates days newest-first, accumulating token estimates
- * - Stops when accumulated + next_day_tokens > 1,600 (safe budget)
- * - Deletes everything older than the start of the cutoff day
- * - Returns the pre-filtered history text and the "Oldest from:" label
+ * v1.5 — Notification Historian:
+ * - Keyword-based SQLite search (zero LLM)
+ * - Day-boundary greedy filter operates on matched results, not full table
+ * - 60-day cleanup (triggered by PiP startup only)
+ * - Post-query destructive delete after successful LLM response
  */
 class NotificationRepository(context: Context) {
 
@@ -45,19 +55,29 @@ class NotificationRepository(context: Context) {
         private const val TAG = "NotificationRepo"
         private const val SAFE_TOKEN_BUDGET = 1600.0
         private const val TOKEN_DIVISOR = 3.5
+        private const val DAYS_60_MILLIS = 60L * 24 * 60 * 60 * 1000
     }
 
     private val database = NotificationDatabase(context)
 
     /**
-     * Loads notification history pre-filtered by the day-boundary greedy token budget algorithm.
-     *
-     * @return Pair of (history text, cutoff label). If the database is empty,
-     *         returns ("", "No notifications logged").
+     * Returns the total number of notifications in the database.
      */
-    suspend fun loadPrefiltered(): Pair<String, String> = withContext(Dispatchers.IO) {
+    fun getTotalCount(): Int {
         val db = database.readableDatabase
+        db.rawQuery("SELECT COUNT(*) FROM ${NotificationDatabase.TABLE_NOTIFICATIONS}", null).use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0)
+            }
+        }
+        return 0
+    }
 
+    /**
+     * Loads ALL notifications from the database, newest first.
+     */
+    suspend fun getAllNotifications(): List<NotificationEntry> = withContext(Dispatchers.IO) {
+        val db = database.readableDatabase
         val entries = mutableListOf<NotificationEntry>()
         db.rawQuery(
             "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC",
@@ -67,69 +87,173 @@ class NotificationRepository(context: Context) {
                 entries.add(cursor.toEntry())
             }
         }
+        entries
+    }
 
-        if (entries.isEmpty()) {
-            return@withContext Pair("", "No notifications logged")
+    /**
+     * Search notifications by keywords. For each keyword, matches title, body, or app_label.
+     * Results are ordered newest-first (timestamp DESC).
+     *
+     * @param keywords List of keywords (must be non-empty; empty list returns empty list)
+     * @return Matching notification entries
+     */
+    suspend fun searchByKeywords(keywords: List<String>): List<NotificationEntry> = withContext(Dispatchers.IO) {
+        if (keywords.isEmpty()) {
+            return@withContext emptyList<NotificationEntry>()
         }
 
-        // Group by calendar day (full day, 00:00:00 boundary) in Kotlin
-        val days = entries.groupBy { entry ->
-            val cal = Calendar.getInstance(TimeZone.getDefault()).apply {
-                timeInMillis = entry.timestamp
+        val db = database.readableDatabase
+        val args = mutableListOf<String>()
+        val conditions = keywords.map { keyword ->
+            args.add("%$keyword%")
+            args.add("%$keyword%")
+            args.add("%$keyword%")
+            "(${NotificationDatabase.COL_TITLE} LIKE ? OR ${NotificationDatabase.COL_BODY} LIKE ? OR ${NotificationDatabase.COL_APP_LABEL} LIKE ?)"
+        }
+
+        val where = conditions.joinToString(" OR ")
+        val query = "SELECT * FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE $where ORDER BY ${NotificationDatabase.COL_TIMESTAMP} DESC"
+
+        val entries = mutableListOf<NotificationEntry>()
+        db.rawQuery(query, args.toTypedArray()).use { cursor ->
+            while (cursor.moveToNext()) {
+                entries.add(cursor.toEntry())
             }
-            cal.set(Calendar.HOUR_OF_DAY, 0)
-            cal.set(Calendar.MINUTE, 0)
-            cal.set(Calendar.SECOND, 0)
-            cal.set(Calendar.MILLISECOND, 0)
-            cal.timeInMillis
-        }.toSortedMap(reverseOrder()) // Newest day first
+        }
+        entries
+    }
 
-        var accumulatedTokens = 0.0
-        val includedDays = mutableListOf<Long>() // day start epoch millis, newest first
+    /**
+     * Delete notifications older than 60 days.
+     *
+     * @return Number of rows deleted
+     */
+    fun cleanupOldNotifications(): Int {
+        val cutoff = System.currentTimeMillis() - DAYS_60_MILLIS
+        val db = database.writableDatabase
+        val deleted = db.delete(
+            NotificationDatabase.TABLE_NOTIFICATIONS,
+            "${NotificationDatabase.COL_TIMESTAMP} < ?",
+            arrayOf(cutoff.toString())
+        )
+        Log.i(TAG, "cleanupOldNotifications deleted $deleted rows older than $cutoff")
+        return deleted
+    }
 
-        for ((dayStart, dayEntries) in days) {
+    /**
+     * Apply the day-boundary greedy token budget filter on an arbitrary list of entries.
+     *
+     * Algorithm:
+     * 1. Group by calendar day (LocalDate from system default zone)
+     * 2. Iterate days newest-first
+     * 3. Accumulate token estimates until budget exceeded
+     * 4. Always include the newest day even if it exceeds budget alone
+     *
+     * @param entries List of notifications to filter (assumed newest-first)
+     * @return FilterResult with analyzed entries, cutoff date, and counts
+     */
+    fun applyDayBoundaryFilter(entries: List<NotificationEntry>): DayBoundaryFilterResult {
+        if (entries.isEmpty()) {
+            return DayBoundaryFilterResult(emptyList(), null, 0, 0)
+        }
+
+        val totalMatches = entries.size
+
+        // Group by calendar day, newest first
+        val days = entries.groupBy { entry ->
+            Instant.ofEpochMilli(entry.timestamp)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+        }.toSortedMap(reverseOrder())
+
+        var runningTotal = 0.0
+        val includedDates = mutableListOf<LocalDate>()
+        val includedEntries = mutableListOf<NotificationEntry>()
+
+        for ((date, dayEntries) in days) {
             val dayTokens = dayEntries.sumOf { entry ->
                 (entry.appLabel.length + entry.title.length + entry.body.length) / TOKEN_DIVISOR
             }
 
-            if (includedDays.isEmpty()) {
-                // Always include the newest day, even if it exceeds budget on its own.
-                includedDays.add(dayStart)
-                accumulatedTokens += dayTokens
+            if (includedDates.isEmpty()) {
+                // Always include the newest day, even if it exceeds budget on its own
+                includedDates.add(date)
+                runningTotal += dayTokens
+                includedEntries.addAll(dayEntries.sortedByDescending { it.timestamp })
             } else {
-                if (accumulatedTokens + dayTokens > SAFE_TOKEN_BUDGET) {
+                if (runningTotal + dayTokens > SAFE_TOKEN_BUDGET) {
                     break
                 }
-                includedDays.add(dayStart)
-                accumulatedTokens += dayTokens
+                includedDates.add(date)
+                runningTotal += dayTokens
+                includedEntries.addAll(dayEntries.sortedByDescending { it.timestamp })
             }
         }
 
-        // The last included day is the cutoff day.
-        val cutoffDay = includedDays.last()
+        val cutoffDate = includedDates.lastOrNull()
+        val analyzedCount = includedEntries.size
 
-        // DELETE from SQLite everything older than the START of that cutoff day.
-        val deletedRows = db.delete(
+        return DayBoundaryFilterResult(
+            analyzedEntries = includedEntries,
+            cutoffDate = cutoffDate,
+            totalMatches = totalMatches,
+            analyzedCount = analyzedCount
+        )
+    }
+
+    /**
+     * Build the history text for the LLM prompt from a list of entries.
+     * Format: yyyy-MM-dd HH:mm | AppLabel | Title: Body
+     */
+    fun buildHistoryText(entries: List<NotificationEntry>): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+        val sb = StringBuilder()
+        entries.forEach { entry ->
+            val content = when {
+                entry.title.isNotBlank() && entry.body.isNotBlank() -> "${entry.title}: ${entry.body}"
+                entry.title.isNotBlank() -> entry.title
+                entry.body.isNotBlank() -> entry.body
+                else -> "(no content)"
+            }
+            sb.append("${sdf.format(Date(entry.timestamp))} | ${entry.appLabel} | $content\n")
+        }
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * Delete all notifications older than the given timestamp.
+     *
+     * @return Number of rows deleted
+     */
+    fun deleteOlderThan(timestampMillis: Long): Int {
+        val db = database.writableDatabase
+        val deleted = db.delete(
             NotificationDatabase.TABLE_NOTIFICATIONS,
             "${NotificationDatabase.COL_TIMESTAMP} < ?",
-            arrayOf(cutoffDay.toString())
+            arrayOf(timestampMillis.toString())
         )
-        Log.i(TAG, "Deleted $deletedRows rows older than cutoff day $cutoffDay")
+        Log.i(TAG, "deleteOlderThan deleted $deleted rows older than $timestampMillis")
+        return deleted
+    }
 
-        // Build the history text from included days (newest-first).
-        val historyBuilder = StringBuilder()
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
-
-        includedDays.sortedDescending().forEach { dayStart ->
-            val dayEntries = days[dayStart] ?: return@forEach
-            dayEntries.forEach { entry ->
-                historyBuilder.append("[${sdf.format(Date(entry.timestamp))}] ")
-                historyBuilder.append("${entry.appLabel} | ${entry.title} | ${entry.body}\n")
-            }
+    /**
+     * Legacy helper: loads all notifications, applies greedy filter, AND deletes old rows.
+     * Kept for any direct callers; prefer the new granular methods.
+     */
+    suspend fun loadPrefiltered(): Pair<String, String> = withContext(Dispatchers.IO) {
+        val all = getAllNotifications()
+        if (all.isEmpty()) {
+            return@withContext Pair("", "No notifications logged")
         }
-
-        val dateLabel = SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date(cutoffDay))
-        Pair(historyBuilder.toString().trimEnd(), "Oldest from: $dateLabel")
+        val result = applyDayBoundaryFilter(all)
+        if (result.analyzedEntries.isEmpty()) {
+            return@withContext Pair("", "No notifications logged")
+        }
+        val history = buildHistoryText(result.analyzedEntries)
+        val cutoffMillis = result.cutoffDate!!.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        deleteOlderThan(cutoffMillis)
+        val dateLabel = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US).format(result.cutoffDate)
+        Pair(history, "Oldest from: $dateLabel")
     }
 
     fun close() {
