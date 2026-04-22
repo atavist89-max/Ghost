@@ -41,6 +41,7 @@ import com.ghost.app.utils.MemoryManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Chat Activity - Transparent PiP-style overlay with keyboard handling.
