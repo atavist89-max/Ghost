@@ -3,8 +3,6 @@ package com.ghost.app.inference
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
-import com.ghost.app.notification.KeywordExtractor
-import com.ghost.app.notification.NotificationRepository
 import com.ghost.app.utils.DebugLogger
 import com.ghost.app.utils.GhostPaths
 import com.google.ai.edge.litertlm.Backend
@@ -64,7 +62,6 @@ class InferenceEngine(private val context: Context) {
     private val inferenceScope = CoroutineScope(Dispatchers.Default)
 
     private val wikipediaService = WikipediaSearchService(context)
-    private val notificationRepository = NotificationRepository(context)
 
     /**
      * Initialize the inference engine with the model.
@@ -187,7 +184,6 @@ class InferenceEngine(private val context: Context) {
         useWebSearch: Boolean = false,
         useNotificationHistory: Boolean = false,
         notificationHistory: String? = null,
-        excludedNotificationApps: List<String> = emptyList(),
         onToken: (String) -> Unit,
         onComplete: () -> Unit,
         onError: (String) -> Unit,
@@ -236,35 +232,12 @@ class InferenceEngine(private val context: Context) {
                         "You are a robotic computer assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     }
 
-                    var filterCutoffDate: java.time.LocalDate? = null
-
                     val finalPrompt = when {
-                        useNotificationHistory -> {
-                            val keywords = KeywordExtractor.extract(query)
-                            val matched = withContext(Dispatchers.IO) {
-                                notificationRepository.searchByKeywords(keywords, excludedNotificationApps)
-                            }
-                            if (matched.isEmpty()) {
-                                mainScope.launch {
-                                    onToken("No matching notifications found in your history.")
-                                    onComplete()
-                                }
-                                return@launch
-                            }
-                            val filterResult = notificationRepository.applyDayBoundaryFilter(matched)
-                            val historyText = notificationRepository.buildHistoryText(filterResult.analyzedEntries)
-                            if (historyText.isEmpty()) {
-                                mainScope.launch {
-                                    onToken("No matching notifications found in your history.")
-                                    onComplete()
-                                }
-                                return@launch
-                            }
-                            filterCutoffDate = filterResult.cutoffDate
+                        useNotificationHistory && !notificationHistory.isNullOrEmpty() -> {
                             buildString {
                                 append("You are Ghost. Answer based ONLY on the provided notification history below.")
                                 append("\n\nNotifications:\n")
-                                append(historyText)
+                                append(notificationHistory)
                                 append("\n\nUser question: ")
                                 append(query)
                                 append("\n\nCRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal.")
@@ -331,13 +304,6 @@ class InferenceEngine(private val context: Context) {
 
                     withContext(Dispatchers.Main) {
                         onComplete()
-                    }
-
-                    // Post-query destructive delete for notification mode
-                    if (useNotificationHistory && filterCutoffDate != null) {
-                        val cutoffMillis = filterCutoffDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                        val deleted = notificationRepository.deleteOlderThan(cutoffMillis)
-                        Log.i(TAG, "Post-query delete: $deleted rows older than $cutoffMillis")
                     }
 
                     if (useWebSearch) {
@@ -491,7 +457,6 @@ $query
             engine?.close()
             engine = null
             isInitialized.set(false)
-            notificationRepository.close()
             Log.i(TAG, "Inference engine released")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing inference engine", e)

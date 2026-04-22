@@ -35,6 +35,7 @@ import com.ghost.app.notification.NotificationPrefs
 import com.ghost.app.notification.NotificationRepository
 import com.ghost.app.ui.GhostInterface
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -89,6 +90,7 @@ class ChatActivity : ComponentActivity() {
     private val _lastUserQuery = mutableStateOf("")
     private val _availableNotificationApps = mutableStateOf<List<String>>(emptyList())
     private val _excludedNotificationApps = mutableStateOf<Set<String>>(emptySet())
+    private var notificationCutoffMillis: Long? = null
     private var notificationRepository: NotificationRepository? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -187,6 +189,7 @@ class ChatActivity : ComponentActivity() {
                                             result.cutoffDate
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                                        notificationCutoffMillis = result.cutoffDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                                         withContext(Dispatchers.Main) {
                                             _notificationHistory.value = historyText
                                             _notificationCutoffLabel.value = label
@@ -203,6 +206,7 @@ class ChatActivity : ComponentActivity() {
                             _isNotificationMode.value = false
                             _notificationHistory.value = null
                             _notificationCutoffLabel.value = null
+                            notificationCutoffMillis = null
                         }
                     },
                     notificationCutoffLabel = _notificationCutoffLabel.value,
@@ -231,6 +235,7 @@ class ChatActivity : ComponentActivity() {
                                             result.cutoffDate
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                                        notificationCutoffMillis = result.cutoffDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                                         withContext(Dispatchers.Main) {
                                             _notificationHistory.value = historyText
                                             _notificationCutoffLabel.value = label
@@ -280,11 +285,7 @@ class ChatActivity : ComponentActivity() {
     private fun buildNotificationLabel(totalMatches: Int, analyzedCount: Int, cutoffDate: LocalDate?): String {
         return when {
             totalMatches == 0 -> "🔔 No notifications logged"
-            analyzedCount == totalMatches -> "🔔 $totalMatches matches | All analyzed"
-            else -> {
-                val dateStr = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US).format(cutoffDate)
-                "🔔 $totalMatches matches | $analyzedCount analyzed | Back to: $dateStr"
-            }
+            else -> "🔔 Latest $analyzedCount/$totalMatches notifications used"
         }
     }
 
@@ -323,7 +324,6 @@ class ChatActivity : ComponentActivity() {
             useWebSearch = useNetSearch,
             useNotificationHistory = _isNotificationMode.value,
             notificationHistory = _notificationHistory.value,
-            excludedNotificationApps = _excludedNotificationApps.value.toList(),
             onToken = { token ->
                 mainScope.launch {
                     _responseText.value += token
@@ -332,8 +332,17 @@ class ChatActivity : ComponentActivity() {
             onComplete = {
                 mainScope.launch {
                     _isGenerating.value = false
-                    if (_isNotificationMode.value && _responseText.value.trim() == "No matching notifications found in your history.") {
-                        _notificationCutoffLabel.value = "🔔 No matches found"
+                    if (_isNotificationMode.value) {
+                        notificationCutoffMillis?.let { cutoff ->
+                            mainScope.launch(Dispatchers.IO) {
+                                try {
+                                    val deleted = notificationRepository!!.deleteOlderThan(cutoff)
+                                    Log.i(TAG, "Post-query delete: $deleted rows older than $cutoff")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Post-query delete failed", e)
+                                }
+                            }
+                        }
                     }
                     DebugLogger.i(TAG, "Inference complete")
                 }

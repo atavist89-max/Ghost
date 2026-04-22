@@ -54,7 +54,7 @@ class NotificationRepository(context: Context) {
 
     companion object {
         private const val TAG = "NotificationRepo"
-        private const val SAFE_TOKEN_BUDGET = 1600.0
+        private const val SAFE_TOKEN_BUDGET = 1800.0
         private const val TOKEN_DIVISOR = 3.5
         private const val DAYS_60_MILLIS = 60L * 24 * 60 * 60 * 1000
     }
