@@ -13,7 +13,8 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 - 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
 - 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
 - 🌐 **Optional Web Search**: Wikipedia API via MediaWiki (no API key required). Full article injected into prompt
-- 🔋 **Zero Background Drain**: No services, no notifications when closed
+- 🔔 **Notification Historian**: Agentic search over your local notification stream using on-device LLM. Background logger captures notifications 24/7; PiP queries them on demand
+- 🔋 **Zero Background Drain**: No LLM/TTS in background service; app fully terminates when PiP closes
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
 ## Requirements
@@ -240,6 +241,7 @@ Open Ghost. You will be sent to system settings to grant:
 
 1. **All files access** — so Ghost can read the 2.5GB model
 2. **Display over other apps** — so the floating PiP window can appear
+3. **Notification access** — so Ghost can log notifications for the historian feature
 
 Grant both, then return to Ghost.
 
@@ -263,8 +265,9 @@ Grant both, then return to Ghost.
 2. **Capture**: Single frame is captured (1280×720)
 3. **PiP Window**: Floating terminal appears with Iris and mode toggle
 4. **Select Mode**: `TXT` (default) for text-only, `VIS` for screenshot analysis
-5. **Toggle Web Search** (optional, TXT mode only): Tap globe 🌐 to enable Wikipedia search. Hidden in VIS mode to reduce visual clutter
-6. **Ask**: Type your question about the screen content
+5. **Toggle Web Search** (optional, TXT mode only): Tap globe 🌐 to enable Wikipedia search. Hidden in VIS mode
+6. **Toggle Notification Historian** (optional, TXT mode only): Tap bell 🔔 to search your notification history. Mutually exclusive with web search
+7. **Ask**: Type your question about the screen content or notification history
 7. **Analyze**: Local LLM processes the query and streams the answer
 8. **Close**: Tap × or swipe off-screen to dismiss
 
@@ -347,6 +350,7 @@ ghost/
 | `MANAGE_EXTERNAL_STORAGE` | Read 2.5GB model file | Yes |
 | `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Screen capture on Android 16 | Yes |
 | `SYSTEM_ALERT_WINDOW` | Floating PiP window | Yes |
+| `BIND_NOTIFICATION_LISTENER_SERVICE` | 24/7 notification history logging | Yes (for historian feature) |
 | `INTERNET` | Optional Wikipedia web search API | No (offline mode works without it) |
 
 ## Troubleshooting
@@ -384,8 +388,8 @@ Device will automatically switch from NPU to GPU if it gets warm
 ## Safety & Privacy
 
 - **No data leaves the device by default**: INTERNET permission is only used for optional Wikipedia web search. All LLM inference is local.
-- **No background activity**: App fully terminates when PiP is closed
-- **No persistent storage**: Screenshots are held in memory only
+- **No background LLM/TTS**: App fully terminates when PiP is closed; only lightweight notification logger persists
+- **No persistent storage**: Screenshots are held in memory only; notification DB is user-controlled local SQLite
 - **No analytics/telemetry**: Zero external communication
 
 ## License
@@ -393,6 +397,19 @@ Device will automatically switch from NPU to GPU if it gets warm
 Private use only. Not for redistribution.
 
 ## Version History
+
+### v1.5.2 (2026-04-22)
+- Added **Notification Historian** feature
+  - `NotificationLoggerService` — `NotificationListenerService` that logs all notifications to SQLite 24/7
+  - `NotificationDatabase` — flat-log SQLite with WAL mode for concurrent read/write
+  - `NotificationRepository` — day-boundary greedy token-budget pre-filter (1,600 token safe budget)
+  - 🔔 toggle in PiP header (TXT mode only), mutually exclusive with 🌐 Wikipedia toggle
+  - Input hint changes to "Search your notifications..." when active
+  - Response area shows `[NOTIFICATION MODE]` indicator
+  - Oldest-from date label displayed above input field
+  - Destructive cleanup after each Bell press keeps DB bounded
+- Added `BIND_NOTIFICATION_LISTENER_SERVICE` permission
+- Updated architecture diagram and README
 
 ### v1.5.1 (2026-04-15)
 - WEB toggle (`🌐`) is now visible only in `TXT` mode; hidden in `VIS` mode

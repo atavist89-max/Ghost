@@ -80,6 +80,9 @@ fun GhostInterface(
     isNetEnabled: Boolean = false,
     onNetToggle: (Boolean) -> Unit = {},
     isNetConfigured: Boolean = true,
+    isNotificationMode: Boolean = false,
+    onNotificationToggle: (Boolean) -> Unit = {},
+    notificationCutoffLabel: String? = null,
     userQuery: String? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit,
@@ -93,9 +96,12 @@ fun GhostInterface(
 
     LaunchedEffect(isVisualMode) {
         localVisualMode = isVisualMode
-        // Optional: disable web search when entering visual mode
+        // Disable web search and notification mode when entering visual mode
         if (isVisualMode && isNetEnabled) {
             onNetToggle(false)
+        }
+        if (isVisualMode && isNotificationMode) {
+            onNotificationToggle(false)
         }
     }
 
@@ -181,6 +187,8 @@ fun GhostInterface(
                 isNetEnabled = isNetEnabled,
                 onNetToggle = onNetToggle,
                 isNetConfigured = isNetConfigured,
+                isNotificationMode = isNotificationMode,
+                onNotificationToggle = onNotificationToggle,
                 onClose = onClose,
                 onDebugClick = onDebugClick
             )
@@ -201,13 +209,25 @@ fun GhostInterface(
                 isGenerating = isGenerating,
                 isEngineReady = isEngineReady,
                 isVisualMode = localVisualMode,
+                isNotificationMode = isNotificationMode,
                 capturedBitmap = capturedBitmap,
                 userQuery = userQuery,
                 scrollState = scrollState,
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(modifier = Modifier.height(6.dp))  // Reduced from 12dp
+            // Oldest-from label for notification mode
+            if (isNotificationMode && !notificationCutoffLabel.isNullOrEmpty()) {
+                Text(
+                    text = notificationCutoffLabel,
+                    fontFamily = VT323,
+                    fontSize = 12.sp,
+                    color = PhosphorDim.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            } else {
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             // Terminal command line input
             TerminalInputLine(
@@ -223,7 +243,8 @@ fun GhostInterface(
                         irisState = IrisView.State.THINKING
                     }
                 },
-                enabled = !isGenerating && isEngineReady
+                enabled = !isGenerating && isEngineReady && !(isNotificationMode && notificationCutoffLabel == "No notifications logged"),
+                isNotificationMode = isNotificationMode
             )
         }
 
@@ -244,6 +265,8 @@ private fun PipBoyHeader(
     isNetEnabled: Boolean,
     onNetToggle: (Boolean) -> Unit,
     isNetConfigured: Boolean,
+    isNotificationMode: Boolean,
+    onNotificationToggle: (Boolean) -> Unit,
     onClose: () -> Unit,
     onDebugClick: () -> Unit
 ) {
@@ -277,11 +300,29 @@ private fun PipBoyHeader(
 
         Spacer(modifier = Modifier.width(4.dp))
 
-        // ONLY SHOW WEB TOGGLE WHEN IN TXT MODE (not visual mode)
+        // ONLY SHOW BELL AND WEB TOGGLES WHEN IN TXT MODE (not visual mode)
         if (!isVisualMode) {
+            BellToggle(
+                isNotificationMode = isNotificationMode,
+                onToggle = {
+                    if (it && isNetEnabled) {
+                        onNetToggle(false)
+                    }
+                    onNotificationToggle(it)
+                },
+                enabled = !isGenerating
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+
             GlobeToggle(
                 isNetEnabled = isNetEnabled,
-                onToggle = onNetToggle,
+                onToggle = {
+                    if (it && isNotificationMode) {
+                        onNotificationToggle(false)
+                    }
+                    onNetToggle(it)
+                },
                 isConfigured = isNetConfigured
             )
 
@@ -543,11 +584,49 @@ private fun GlobeToggle(
 }
 
 @Composable
+private fun BellToggle(
+    isNotificationMode: Boolean,
+    onToggle: (Boolean) -> Unit,
+    enabled: Boolean
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isNotificationMode) 1.0f else 0.95f,
+        animationSpec = spring(stiffness = 400f, dampingRatio = 0.5f)
+    )
+
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .scale(scale)
+            .clip(RoundedCornerShape(2.dp))
+            .background(
+                if (isNotificationMode) PhosphorGreen.copy(alpha = 0.2f) else GunmetalSurface
+            )
+            .border(
+                width = 1.dp,
+                color = if (isNotificationMode) PhosphorGreen else PhosphorDim.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(2.dp)
+            )
+            .clickable(enabled = enabled) {
+                onToggle(!isNotificationMode)
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "\uD83D\uDD14",
+            fontSize = 16.sp,
+            color = if (isNotificationMode) PhosphorGreen else PhosphorDim.copy(alpha = 0.4f)
+        )
+    }
+}
+
+@Composable
 private fun TerminalResponseArea(
     responseText: String,
     isGenerating: Boolean,
     isEngineReady: Boolean,
     isVisualMode: Boolean,
+    isNotificationMode: Boolean,
     capturedBitmap: Bitmap?,
     userQuery: String? = null,
     scrollState: androidx.compose.foundation.ScrollState,
@@ -627,7 +706,15 @@ private fun TerminalResponseArea(
                         .fillMaxSize()
                         .verticalScroll(scrollState)
                 ) {
-                    if (!isVisualMode) {
+                    if (isNotificationMode) {
+                        Text(
+                            text = "[NOTIFICATION MODE]",
+                            fontFamily = VT323,
+                            fontSize = 10.sp,
+                            color = PhosphorDim.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    } else if (!isVisualMode) {
                         Text(
                             text = "[TEXT MODE]",
                             fontFamily = VT323,
@@ -706,7 +793,8 @@ private fun TerminalInputLine(
     query: String,
     onQueryChange: (String) -> Unit,
     onSend: () -> Unit,
-    enabled: Boolean
+    enabled: Boolean,
+    isNotificationMode: Boolean = false
 ) {
     Row(
         modifier = Modifier

@@ -19,6 +19,12 @@
     <!-- AccessibilityService for silent screenshots (replaces MediaProjection) -->
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
+    <!-- NotificationListenerService for 24/7 background notification logging -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
+
+    <!-- Optional: auto-start notification logger after boot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:name=".GhostApplication"
         android:allowBackup="false"
@@ -72,6 +78,17 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/ghost_accessibility_config" />
+        </service>
+
+        <!-- Notification Historian background logger -->
+        <service
+            android:name=".notification.NotificationLoggerService"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true"
+            android:label="Ghost Notification Historian">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
     </application>

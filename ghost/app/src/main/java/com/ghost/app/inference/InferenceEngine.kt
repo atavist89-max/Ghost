@@ -182,6 +182,8 @@ class InferenceEngine(private val context: Context) {
         query: String,
         useVisualMode: Boolean = false,
         useWebSearch: Boolean = false,
+        useNotificationHistory: Boolean = false,
+        notificationHistory: String? = null,
         onToken: (String) -> Unit,
         onComplete: () -> Unit,
         onError: (String) -> Unit,
@@ -230,21 +232,34 @@ class InferenceEngine(private val context: Context) {
                         "You are a robotic computer assistant. Provide brief, factual, and logically structured responses devoid of emotion, conversational filler, or elaboration. Respond with machine-like precision and efficiency. CRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal."
                     }
 
-                    val finalPrompt = if (articleTitle != null && articleContent != null) {
-                        buildString {
-                            append(basePersona)
-                            append("\nWikipedia Article Title: ")
-                            append(articleTitle)
-                            append("\nWikipedia Article Content: ")
-                            append(articleContent)
-                            append("\n\nuser_query: ")
-                            append(query)
-                            append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. If article was truncated, focus on key facts in the provided content. Start your response with 'Based on Wiki-page ")
-                            append(articleTitle)
-                            append(":' followed by exactly 5 concise sentences. Do not include any other text.")
+                    val finalPrompt = when {
+                        useNotificationHistory && !notificationHistory.isNullOrEmpty() -> {
+                            buildString {
+                                append("You are Ghost. Answer based ONLY on the provided notification history below.")
+                                append("\n\nNOTIFICATION HISTORY:\n")
+                                append(notificationHistory)
+                                append("\n\nUSER QUERY: ")
+                                append(query)
+                                append("\n\nCRITICAL: Use only plain text with no formatting. Do not use asterisks, stars, bullet points, markdown, or any special characters for emphasis. Write as if outputting to a 1970s monochrome terminal.")
+                            }
                         }
-                    } else {
-                        "$basePersona USER QUERY: $query"
+                        articleTitle != null && articleContent != null -> {
+                            buildString {
+                                append(basePersona)
+                                append("\nWikipedia Article Title: ")
+                                append(articleTitle)
+                                append("\nWikipedia Article Content: ")
+                                append(articleContent)
+                                append("\n\nuser_query: ")
+                                append(query)
+                                append("\nCRITICAL INSTRUCTION: Answer the user_query using ONLY the Wikipedia Article Content provided above. If article was truncated, focus on key facts in the provided content. Start your response with 'Based on Wiki-page ")
+                                append(articleTitle)
+                                append(":' followed by exactly 5 concise sentences. Do not include any other text.")
+                            }
+                        }
+                        else -> {
+                            "$basePersona USER QUERY: $query"
+                        }
                     }
 
                     val estimatedTotalTokens = finalPrompt.length / 4

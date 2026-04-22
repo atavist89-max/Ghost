@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.ghost.app.inference.InferenceEngine
 import com.ghost.app.inference.PiperTTS
+import com.ghost.app.notification.NotificationRepository
 
 import com.ghost.app.ui.GhostInterface
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -78,7 +79,11 @@ class ChatActivity : ComponentActivity() {
     private val _isEngineReady = mutableStateOf(false)
     private val _isVisualMode = mutableStateOf(false)
     private val _isNetEnabled = mutableStateOf(false)
+    private val _isNotificationMode = mutableStateOf(false)
+    private val _notificationHistory = mutableStateOf<String?>(null)
+    private val _notificationCutoffLabel = mutableStateOf<String?>(null)
     private val _lastUserQuery = mutableStateOf("")
+    private var notificationRepository: NotificationRepository? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,6 +112,9 @@ class ChatActivity : ComponentActivity() {
         // Initialize inference engine
         initializeEngine()
 
+        // Initialize notification repository for historian feature
+        notificationRepository = NotificationRepository(this)
+
         // Initialize TTS (HAL model already in models folder with Gemma)
         piperTTS = PiperTTS(this).apply {
             val initialized = initialize()
@@ -127,6 +135,32 @@ class ChatActivity : ComponentActivity() {
                     isNetEnabled = _isNetEnabled.value,
                     onNetToggle = { _isNetEnabled.value = it },
                     isNetConfigured = true,
+                    isNotificationMode = _isNotificationMode.value,
+                    onNotificationToggle = { enabled ->
+                        if (enabled) {
+                            _isNetEnabled.value = false
+                            _responseText.value = ""
+                            mainScope.launch(Dispatchers.IO) {
+                                try {
+                                    val (history, label) = notificationRepository!!.loadPrefiltered()
+                                    withContext(Dispatchers.Main) {
+                                        _notificationHistory.value = history
+                                        _notificationCutoffLabel.value = label
+                                        _isNotificationMode.value = true
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        _responseText.value = "Error loading notifications: ${e.message}"
+                                    }
+                                }
+                            }
+                        } else {
+                            _isNotificationMode.value = false
+                            _notificationHistory.value = null
+                            _notificationCutoffLabel.value = null
+                        }
+                    },
+                    notificationCutoffLabel = _notificationCutoffLabel.value,
                     userQuery = _lastUserQuery.value,
                     onSendQuery = { query ->
                         if (_isNetEnabled.value && _responseText.value.contains("WEB SEARCH ERROR")) {
@@ -195,6 +229,8 @@ class ChatActivity : ComponentActivity() {
             query = query,
             useVisualMode = useVisualMode,
             useWebSearch = useNetSearch,
+            useNotificationHistory = _isNotificationMode.value,
+            notificationHistory = _notificationHistory.value,
             onToken = { token ->
                 mainScope.launch {
                     _responseText.value += token
@@ -236,6 +272,9 @@ class ChatActivity : ComponentActivity() {
         inferenceEngine?.close()
         inferenceEngine = null
 
+        notificationRepository?.close()
+        notificationRepository = null
+
         capturedBitmap?.recycle()
         capturedBitmap = null
 
@@ -270,6 +309,9 @@ private fun ChatScreenPiP(
     isNetEnabled: Boolean,
     onNetToggle: (Boolean) -> Unit,
     isNetConfigured: Boolean = true,
+    isNotificationMode: Boolean = false,
+    onNotificationToggle: (Boolean) -> Unit = {},
+    notificationCutoffLabel: String? = null,
     userQuery: String? = null,
     onSendQuery: (String) -> Unit,
     onClose: () -> Unit
@@ -343,6 +385,9 @@ private fun ChatScreenPiP(
                     isNetEnabled = isNetEnabled,
                     onNetToggle = onNetToggle,
                     isNetConfigured = isNetConfigured,
+                    isNotificationMode = isNotificationMode,
+                    onNotificationToggle = onNotificationToggle,
+                    notificationCutoffLabel = notificationCutoffLabel,
                     userQuery = userQuery,
                     onSendQuery = onSendQuery,
                     onClose = onClose

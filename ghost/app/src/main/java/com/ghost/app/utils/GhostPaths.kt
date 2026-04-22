@@ -31,6 +31,14 @@ object GhostPaths {
         get() = "$BASE_DIR/gemma-4-e2b.litertlm"
 
     /**
+     * Path to the notification history SQLite database.
+     * Lives alongside the model file and TTS assets. Termux-accessible.
+     * Survives app reinstalls because it's outside app-scoped storage.
+     */
+    val NOTIFICATION_DB: String
+        get() = "$BASE_DIR/ghost_notifications.db"
+
+    /**
      * Alternative model names to look for (for flexibility)
      */
     fun findModelFile(): File? {
