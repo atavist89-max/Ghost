@@ -14,6 +14,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 - 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
 - 🌐 **Optional Web Search**: Wikipedia API via MediaWiki (no API key required). Full article injected into prompt
 - 🔔 **Notification Historian**: Agentic search over your local notification stream using on-device LLM. Background logger captures notifications 24/7; PiP queries them on demand
+- 🧹 **Per-App Notification Filter**: Expandable dropdown below the 🔔 bell lets you include/exclude specific apps from notification searches. Selections persist across sessions via SharedPreferences
 - 🔋 **Zero Background Drain**: No LLM/TTS in background service; app fully terminates when PiP closes
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
@@ -315,6 +316,12 @@ ghost/
 │   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
 │   │   ├── ModelValidator.kt
 │   │   └── ThermalMonitor.kt
+│   ├── notification/
+│   │   ├── NotificationLoggerService.kt
+│   │   ├── NotificationDatabase.kt
+│   │   ├── NotificationRepository.kt
+│   │   ├── KeywordExtractor.kt
+│   │   └── NotificationPrefs.kt
 │   ├── ui/
 │   │   ├── GhostWindowManager.kt
 │   │   ├── GhostInterface.kt
@@ -398,16 +405,24 @@ Private use only. Not for redistribution.
 
 ## Version History
 
+### v1.5.3 (2026-04-22)
+- **Per-App Notification Filter**
+  - Expandable dropdown below the 🔔 bell shows all apps with notification history
+  - Tap to check/uncheck apps; unchecked apps are excluded from search
+  - Selections saved automatically via `NotificationPrefs` (SharedPreferences)
+  - Label refreshes immediately when filter changes
+- Updated README and architecture docs
+
 ### v1.5.2 (2026-04-22)
 - Added **Notification Historian** feature
   - `NotificationLoggerService` — `NotificationListenerService` that logs all notifications to SQLite 24/7
   - `NotificationDatabase` — flat-log SQLite with WAL mode for concurrent read/write
-  - `NotificationRepository` — day-boundary greedy token-budget pre-filter (1,600 token safe budget)
+  - `NotificationRepository` — keyword-based SQLite search + day-boundary greedy token filter (1,600 token safe budget)
+  - `KeywordExtractor` — deterministic zero-LLM keyword extraction with 150+ stop words
   - 🔔 toggle in PiP header (TXT mode only), mutually exclusive with 🌐 Wikipedia toggle
-  - Input hint changes to "Search your notifications..." when active
-  - Response area shows `[NOTIFICATION MODE]` indicator
-  - Oldest-from date label displayed above input field
-  - Destructive cleanup after each Bell press keeps DB bounded
+  - Three-tier status label: `{matches} matches | {analyzed} analyzed | Back to: {date}`
+  - 60-day automatic cleanup on PiP startup (background service never deletes)
+  - Post-query destructive delete keeps DB bounded after successful LLM response
 - Added `BIND_NOTIFICATION_LISTENER_SERVICE` permission
 - Updated architecture diagram and README
 
@@ -453,4 +468,4 @@ Private use only. Not for redistribution.
 - Hexagon NPU support with GPU fallback
 - Floating PiP Compose UI
 - Thermal monitoring
-# Build Sat Apr 13 20:10:00 UTC 2026
+# Build Tue Apr 22 06:25:00 UTC 2026
