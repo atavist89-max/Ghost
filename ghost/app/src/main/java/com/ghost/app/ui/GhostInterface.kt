@@ -234,7 +234,7 @@ fun GhostInterface(
                 Text(
                     text = notificationCutoffLabel,
                     fontFamily = VT323,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     color = PhosphorDim.copy(alpha = 0.7f),
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                 )
@@ -659,7 +659,7 @@ private fun AppFilterDropdown(
             Text(
                 text = if (expanded) "▲" else "▼",
                 fontFamily = VT323,
-                fontSize = 10.sp,
+                fontSize = 15.sp,
                 color = PhosphorDim
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -667,7 +667,7 @@ private fun AppFilterDropdown(
             Text(
                 text = "Apps $includedCount/${apps.size}",
                 fontFamily = VT323,
-                fontSize = 10.sp,
+                fontSize = 15.sp,
                 color = PhosphorDim.copy(alpha = 0.7f)
             )
         }
@@ -712,9 +712,9 @@ private fun AppFilterDropdown(
                             if (isChecked) {
                                 Text(
                                     text = "✓",
-                                    fontSize = 7.sp,
+                                    fontSize = 11.sp,
                                     color = PhosphorGreen,
-                                    lineHeight = 8.sp
+                                    lineHeight = 12.sp
                                 )
                             }
                         }
@@ -722,7 +722,7 @@ private fun AppFilterDropdown(
                         Text(
                             text = app,
                             fontFamily = VT323,
-                            fontSize = 10.sp,
+                            fontSize = 15.sp,
                             color = if (isChecked) TextPhosphor else TextPhosphorDim.copy(alpha = 0.35f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
