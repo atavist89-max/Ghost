@@ -18,7 +18,7 @@ class NotificationDatabase(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         private const val TAG = "NotificationDB"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         const val TABLE_NOTIFICATIONS = "notifications"
 
         const val COL_ID = "id"
@@ -70,11 +70,24 @@ class NotificationDatabase(context: Context) : SQLiteOpenHelper(
 
         db.execSQL("CREATE INDEX idx_timestamp_desc ON $TABLE_NOTIFICATIONS($COL_TIMESTAMP DESC)")
         db.execSQL("CREATE INDEX idx_package ON $TABLE_NOTIFICATIONS($COL_PACKAGE_NAME)")
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_notification ON " +
+            "$TABLE_NOTIFICATIONS(datetime($COL_TIMESTAMP/1000, 'unixepoch'), $COL_TITLE, $COL_BODY)"
+        )
         Log.i(TAG, "Notification database created with WAL indexes")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_NOTIFICATIONS")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL(
+                "DELETE FROM $TABLE_NOTIFICATIONS WHERE $COL_ID NOT IN (" +
+                "SELECT MIN($COL_ID) FROM $TABLE_NOTIFICATIONS " +
+                "GROUP BY datetime($COL_TIMESTAMP/1000, 'unixepoch'), $COL_TITLE, $COL_BODY)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_notification ON " +
+                "$TABLE_NOTIFICATIONS(datetime($COL_TIMESTAMP/1000, 'unixepoch'), $COL_TITLE, $COL_BODY)"
+            )
+        }
     }
 }

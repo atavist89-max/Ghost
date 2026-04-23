@@ -183,6 +183,36 @@ class NotificationRepository(context: Context) {
     }
 
     /**
+     * Delete duplicate notifications keeping only the oldest row per
+     * (datetime-second, title, body) group.
+     *
+     * @return Number of duplicate rows deleted
+     */
+    fun cleanupDuplicateNotifications(): Int {
+        val db = database.writableDatabase
+        val idsToDelete = mutableListOf<Long>()
+        db.rawQuery(
+            "SELECT ${NotificationDatabase.COL_ID} FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} WHERE ${NotificationDatabase.COL_ID} NOT IN (" +
+            "SELECT MIN(${NotificationDatabase.COL_ID}) FROM ${NotificationDatabase.TABLE_NOTIFICATIONS} " +
+            "GROUP BY datetime(${NotificationDatabase.COL_TIMESTAMP}/1000, 'unixepoch'), ${NotificationDatabase.COL_TITLE}, ${NotificationDatabase.COL_BODY})",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                idsToDelete.add(cursor.getLong(0))
+            }
+        }
+        if (idsToDelete.isEmpty()) return 0
+        val placeholders = idsToDelete.joinToString(",") { "?" }
+        val deleted = db.delete(
+            NotificationDatabase.TABLE_NOTIFICATIONS,
+            "${NotificationDatabase.COL_ID} IN ($placeholders)",
+            idsToDelete.map { it.toString() }.toTypedArray()
+        )
+        Log.i(TAG, "cleanupDuplicateNotifications deleted $deleted rows")
+        return deleted
+    }
+
+    /**
      * Estimate the token cost of a single notification entry as it will appear
      * in the LLM prompt (formatted line length / conservative divisor).
      */

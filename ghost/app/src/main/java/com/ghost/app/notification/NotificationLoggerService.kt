@@ -138,7 +138,12 @@ class NotificationLoggerService : NotificationListenerService() {
                 put(NotificationDatabase.COL_HOUR_OF_DAY, hourOfDay)
             }
 
-            dbInstance.insert(NotificationDatabase.TABLE_NOTIFICATIONS, null, values)
+            dbInstance.insertWithOnConflict(
+                NotificationDatabase.TABLE_NOTIFICATIONS,
+                null,
+                values,
+                android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
+            )
             Log.d(TAG, "Logged notification from $packageName at ${sbn.postTime}")
         } catch (e: Exception) {
             Log.e(TAG, "Error logging notification", e)

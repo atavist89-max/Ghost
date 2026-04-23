@@ -143,6 +143,16 @@ class ChatActivity : ComponentActivity() {
             }
         }
 
+        // Deduplication cleanup — runs once per PiP session as a safety net
+        mainScope.launch(Dispatchers.IO) {
+            try {
+                val deleted = notificationRepository!!.cleanupDuplicateNotifications()
+                Log.i(TAG, "PiP startup dedup cleanup deleted $deleted duplicate notifications")
+            } catch (e: Exception) {
+                Log.e(TAG, "Deduplication cleanup failed", e)
+            }
+        }
+
         // Initialize TTS (HAL model already in models folder with Gemma)
         piperTTS = PiperTTS(this).apply {
             val initialized = initialize()
