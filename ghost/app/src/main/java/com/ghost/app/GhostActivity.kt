@@ -10,7 +10,6 @@ import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import com.ghost.app.inference.ModelValidator
-import com.ghost.app.notification.NotificationRepository
 import com.ghost.app.utils.GhostPaths
 import com.ghost.app.utils.PermissionChecker
 import java.io.File
@@ -39,16 +38,6 @@ class GhostActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
-
-        // 1. 60-day cap cleanup before PiP starts (requirement 7)
-        try {
-            val repo = NotificationRepository(this)
-            val deleted = repo.cleanupOldNotifications()
-            repo.close()
-            Log.i(TAG, "GhostActivity startup cleanup deleted $deleted old notifications")
-        } catch (e: Exception) {
-            Log.e(TAG, "Startup cleanup failed", e)
-        }
 
         // Check permissions and proceed
         if (!checkStoragePermission()) {

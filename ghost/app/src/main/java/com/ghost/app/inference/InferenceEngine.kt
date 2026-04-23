@@ -270,6 +270,17 @@ class InferenceEngine(private val context: Context) {
                         logToFile("ENGINE_WARNING", "Prompt approaching 4K limit! May fail.")
                     }
 
+                    // Hard guardrail: never send a prompt that exceeds the model's context window
+                    if (estimatedTotalTokens > 4000) {
+                        val guardrailError = "Prompt too long (~$estimatedTotalTokens tokens). Maximum is 4096. Reduce notification history or query length."
+                        logToFile("ENGINE_ERROR", guardrailError)
+                        Log.e(TAG, guardrailError)
+                        withContext(Dispatchers.Main) {
+                            onError(guardrailError)
+                        }
+                        return@launch
+                    }
+
                     val userMessageObj = if (useVisualMode && bitmap != null) {
                         val imagePath = saveBitmapToCache(bitmap)
                         if (imagePath != null) {

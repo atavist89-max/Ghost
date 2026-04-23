@@ -35,8 +35,6 @@ import com.ghost.app.notification.NotificationPrefs
 import com.ghost.app.notification.NotificationRepository
 import com.ghost.app.ui.GhostInterface
 import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
@@ -90,7 +88,6 @@ class ChatActivity : ComponentActivity() {
     private val _lastUserQuery = mutableStateOf("")
     private val _availableNotificationApps = mutableStateOf<List<String>>(emptyList())
     private val _excludedNotificationApps = mutableStateOf<Set<String>>(emptySet())
-    private var notificationCutoffMillis: Long? = null
     private var notificationRepository: NotificationRepository? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -189,7 +186,6 @@ class ChatActivity : ComponentActivity() {
                                             result.cutoffDate
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
-                                        notificationCutoffMillis = result.cutoffDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                                         withContext(Dispatchers.Main) {
                                             _notificationHistory.value = historyText
                                             _notificationCutoffLabel.value = label
@@ -206,7 +202,6 @@ class ChatActivity : ComponentActivity() {
                             _isNotificationMode.value = false
                             _notificationHistory.value = null
                             _notificationCutoffLabel.value = null
-                            notificationCutoffMillis = null
                         }
                     },
                     notificationCutoffLabel = _notificationCutoffLabel.value,
@@ -235,7 +230,6 @@ class ChatActivity : ComponentActivity() {
                                             result.cutoffDate
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
-                                        notificationCutoffMillis = result.cutoffDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                                         withContext(Dispatchers.Main) {
                                             _notificationHistory.value = historyText
                                             _notificationCutoffLabel.value = label
@@ -332,18 +326,6 @@ class ChatActivity : ComponentActivity() {
             onComplete = {
                 mainScope.launch {
                     _isGenerating.value = false
-                    if (_isNotificationMode.value) {
-                        notificationCutoffMillis?.let { cutoff ->
-                            mainScope.launch(Dispatchers.IO) {
-                                try {
-                                    val deleted = notificationRepository!!.deleteOlderThan(cutoff)
-                                    Log.i(TAG, "Post-query delete: $deleted rows older than $cutoff")
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Post-query delete failed", e)
-                                }
-                            }
-                        }
-                    }
                     DebugLogger.i(TAG, "Inference complete")
                 }
             },
