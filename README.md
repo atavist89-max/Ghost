@@ -291,6 +291,10 @@ GhostActivity (Entry Point)
 │   ├── 340dp×600dp PiP window
 │   ├── Jetpack Compose UI (Material3 dark theme)
 │   └── Draggable + dismissible
+├── Notification Deduplication
+│   ├── Unique expression index: `(datetime(timestamp/1000,'unixepoch'), title, body)`
+│   ├── `INSERT OR IGNORE` at capture time — duplicates silently skipped
+│   └── `cleanupDuplicateNotifications()` safety net at PiP startup
 └── MemoryManager (aggressive cleanup on close)
 ```
 
@@ -397,6 +401,22 @@ Device will automatically switch from NPU to GPU if it gets warm
 - Keep Termux in the foreground and disable battery optimization for it
 - Use a strong Wi-Fi connection; mobile data may drop on files this large
 
+## Notification Deduplication
+
+Ghost deduplicates notifications at two layers to prevent spammy apps from bloating the database:
+
+### Capture-Time Deduplication
+When `NotificationLoggerService` receives a notification, it attempts an `INSERT OR IGNORE` against a **unique expression index** on `(datetime(timestamp/1000,'unixepoch'), title, body)`. If an identical notification (same title + same body + same second) already exists, the insert is silently skipped. This happens in microseconds and requires no app-level logic.
+
+### PiP Startup Safety Net
+When the PiP window opens, `ChatActivity` runs `cleanupDuplicateNotifications()` in the background. This query groups the entire table by `(datetime-second, title, body)` and deletes all but the oldest row in each group. It is idempotent and harmless — if the unique index has already prevented all duplicates, this deletes nothing.
+
+### Database Migration
+If you installed Ghost before v1.5.5, your database is at schema v1. On the first PiP launch after updating, `onUpgrade()` automatically:
+1. Deduplicates existing rows (keeps oldest ID per group)
+2. Creates the unique expression index
+Future installs create the index at `onCreate()` time.
+
 ## Safety & Privacy
 
 - **No data leaves the device by default**: INTERNET permission is only used for optional Wikipedia web search. All LLM inference is local.
@@ -409,6 +429,26 @@ Device will automatically switch from NPU to GPU if it gets warm
 Private use only. Not for redistribution.
 
 ## Version History
+
+### v1.5.5 (2026-04-23)
+- **Notification Deduplication**
+  - Unique SQLite expression index on `(datetime(timestamp/1000,'unixepoch'), title, body)` prevents duplicate inserts at capture time
+  - `INSERT OR IGNORE` in `NotificationLoggerService` silently skips duplicates
+  - DB migration v1→v2: deduplicates existing rows then creates the unique index
+  - `cleanupDuplicateNotifications()` safety net runs at every PiP startup in `ChatActivity`
+
+### v1.5.4 (2026-04-23)
+- **Critical Bug Fixes: Cleanup, Filter, and Token Economics**
+  - Removed post-query destructive delete from `ChatActivity.onComplete` — 60-day startup cleanup is now the only retention policy
+  - Removed redundant `cleanupOldNotifications()` from `GhostActivity`
+  - Removed dead code `loadPrefiltered()` and `deleteOlderThan()` from `NotificationRepository`
+  - Fixed token estimation: counts actual formatted output line length with conservative `TOKEN_DIVISOR = 2.5`
+  - Reserves 220 tokens for prompt template + user query overhead (`EFFECTIVE_BUDGET = 1580`)
+  - Fixed first-day bug: newest day is now capped entry-by-entry if it exceeds budget alone
+  - Added hard guardrail in `InferenceEngine`: rejects prompts >4000 estimated tokens before sending to model
+- **UI Font Size Increases**
+  - App selector dropdown font increased by 50% (`10.sp` → `15.sp`)
+  - Notification label font increased by 20% (`12.sp` → `14.sp`)
 
 ### v1.5.3 (2026-04-22)
 - **Per-App Notification Filter**
@@ -427,7 +467,7 @@ Private use only. Not for redistribution.
   - 🔔 toggle in PiP header (TXT mode only), mutually exclusive with 🌐 Wikipedia toggle
   - Three-tier status label: `{matches} matches | {analyzed} analyzed | Back to: {date}`
   - 60-day automatic cleanup on PiP startup (background service never deletes)
-  - Post-query destructive delete keeps DB bounded after successful LLM response
+  - ~~Post-query destructive delete~~ removed in v1.5.4 — cleanup is now startup-only
 - Added `BIND_NOTIFICATION_LISTENER_SERVICE` permission
 - Updated architecture diagram and README
 
