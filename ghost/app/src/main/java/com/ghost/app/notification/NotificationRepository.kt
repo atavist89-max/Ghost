@@ -187,35 +187,35 @@ class NotificationRepository(context: Context) {
             "Distinct app labels in database: ${appLabels.joinToString(", ")}"
         }
 
-        val prompt = buildString {
-            appendLine("You are a strict intent extraction engine. Given a user's question about their notification history, output ONLY a valid JSON object with the exact fields below.")
-            appendLine()
-            appendLine("Database schema:")
-            appendLine("Table: notifications")
-            appendLine("Columns: id, timestamp, package_name, app_label, title, body, category, priority, is_group_summary, day_of_week, hour_of_day")
-            appendLine()
-            appendLine(appListBlock)
-            appendLine()
-            appendLine("Extract these fields:")
-            appendLine("- target_apps: list of app labels mentioned or implied. Empty means all apps.")
-            appendLine("- person_keywords: list of names, handles, or identifiers mentioned.")
-            appendLine("- topic_keywords: list of subject matter terms and semantic synonyms.")
-            appendLine("- time_scope_days: integer days back from now, or null if no time constraint.")
-            appendLine("- confidence: "high", "medium", or "low" — your certainty about extraction accuracy.")
-            appendLine("- strategy: "precise", "fuzzy", or "broad" — recommended search aggressiveness.")
-            appendLine()
-            appendLine("Examples:")
-            appendLine("User: "Did John ever ask me to buy onions?"")
-            appendLine("Output: {"target_apps":[],"person_keywords":["John"],"topic_keywords":["onions","buy"],"time_scope_days":null,"confidence":"high","strategy":"precise"}")
-            appendLine()
-            appendLine("User: "Anything important from Slack today?"")
-            appendLine("Output: {"target_apps":["Slack"],"person_keywords":[],"topic_keywords":["important"],"time_scope_days":1,"confidence":"low","strategy":"broad"}")
-            appendLine()
-            appendLine("CRITICAL: Output ONLY the JSON object. No markdown, no prose, no reasoning, no code fences.")
-            appendLine()
-            appendLine("User: "$query"")
-            appendLine("Output:")
-        }
+        val prompt = """
+            You are a strict intent extraction engine. Given a user's question about their notification history, output ONLY a valid JSON object with the exact fields below.
+
+            Database schema:
+            Table: notifications
+            Columns: id, timestamp, package_name, app_label, title, body, category, priority, is_group_summary, day_of_week, hour_of_day
+
+            $appListBlock
+
+            Extract these fields:
+            - target_apps: list of app labels mentioned or implied. Empty means all apps.
+            - person_keywords: list of names, handles, or identifiers mentioned.
+            - topic_keywords: list of subject matter terms and semantic synonyms.
+            - time_scope_days: integer days back from now, or null if no time constraint.
+            - confidence: "high", "medium", or "low" — your certainty about extraction accuracy.
+            - strategy: "precise", "fuzzy", or "broad" — recommended search aggressiveness.
+
+            Examples:
+            User: "Did John ever ask me to buy onions?"
+            Output: {"target_apps":[],"person_keywords":["John"],"topic_keywords":["onions","buy"],"time_scope_days":null,"confidence":"high","strategy":"precise"}
+
+            User: "Anything important from Slack today?"
+            Output: {"target_apps":["Slack"],"person_keywords":[],"topic_keywords":["important"],"time_scope_days":1,"confidence":"low","strategy":"broad"}
+
+            CRITICAL: Output ONLY the JSON object. No markdown, no prose, no reasoning, no code fences.
+
+            User: "$query"
+            Output:
+        """.trimIndent()
 
         return try {
             val raw = quickInfer(prompt)
