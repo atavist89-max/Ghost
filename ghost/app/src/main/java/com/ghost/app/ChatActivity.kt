@@ -34,8 +34,9 @@ import com.ghost.app.inference.PiperTTS
 import com.ghost.app.notification.NotificationPrefs
 import com.ghost.app.notification.NotificationRepository
 import com.ghost.app.ui.GhostInterface
-import java.time.LocalDate
 import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.Date
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.ghost.app.ui.theme.GhostTheme
 import com.ghost.app.utils.DebugLogger
@@ -45,18 +46,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Chat Activity - Transparent PiP-style overlay with keyboard handling.
- *
- * CRITICAL: This uses setContent with transparent theme (not WindowManager.addView).
- * WindowManager approach requires SYSTEM_ALERT_WINDOW permission which the app doesn't have.
- *
- * Architecture:
- * - Activity has transparent background (shows apps behind)
- * - PiP UI rendered via Compose setContent (standard Activity approach)
- * - Slide-in animation using Compose animation APIs
- * - Keyboard handling: PiP height squishes to keep Iris and input visible (no offset)
- */
 class ChatActivity : ComponentActivity() {
 
     companion object {
@@ -94,16 +83,13 @@ class ChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate - PiP Activity mode")
 
-        // Clear old debug files at startup
         try {
             File("/storage/emulated/0/Download/GhostModels/debug_log.txt").delete()
             File("/storage/emulated/0/Download/GhostModels/wikipedia_debug.txt").delete()
         } catch (e: Exception) { }
 
-        // Enable edge-to-edge for transparent activity
         enableEdgeToEdge()
 
-        // Get screenshot from intent
         val bytes = intent.getByteArrayExtra(EXTRA_SCREENSHOT_BYTES)
         if (bytes != null) {
             capturedBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -114,13 +100,10 @@ class ChatActivity : ComponentActivity() {
             DebugLogger.e(TAG, "No screenshot bytes in intent!")
         }
 
-        // Initialize inference engine
         initializeEngine()
 
-        // Initialize notification repository for historian feature
         notificationRepository = NotificationRepository(this)
 
-        // Load persisted app filter and available apps from DB
         _excludedNotificationApps.value = NotificationPrefs.loadExcludedApps(this)
         mainScope.launch(Dispatchers.IO) {
             try {
@@ -133,7 +116,6 @@ class ChatActivity : ComponentActivity() {
             }
         }
 
-        // 60-day cap cleanup — runs exactly once per PiP session (requirement 7)
         mainScope.launch(Dispatchers.IO) {
             try {
                 val deleted = notificationRepository!!.cleanupOldNotifications()
@@ -143,7 +125,6 @@ class ChatActivity : ComponentActivity() {
             }
         }
 
-        // Deduplication cleanup — runs once per PiP session as a safety net
         mainScope.launch(Dispatchers.IO) {
             try {
                 val deleted = notificationRepository!!.cleanupDuplicateNotifications()
@@ -153,13 +134,11 @@ class ChatActivity : ComponentActivity() {
             }
         }
 
-        // Initialize TTS (HAL model already in models folder with Gemma)
         piperTTS = PiperTTS(this).apply {
             val initialized = initialize()
             Log.i(TAG, "Piper TTS initialized: $initialized, sampleRate=${getSampleRate()}")
         }
 
-        // Set up Compose UI with transparent background and keyboard handling
         setContent {
             GhostTheme {
                 ChatScreenPiP(
@@ -184,18 +163,28 @@ class ChatActivity : ComponentActivity() {
                                     val totalCount = notificationRepository!!.getTotalCount(excluded)
                                     if (totalCount == 0) {
                                         withContext(Dispatchers.Main) {
-                                            _notificationCutoffLabel.value = "🔔 No notifications logged"
+                                            _notificationCutoffLabel.value = "🔔 0/0 · no matches"
                                             _isNotificationMode.value = true
                                         }
                                     } else {
-                                        val allEntries = notificationRepository!!.getAllNotifications(excluded)
-                                        val result = notificationRepository!!.applyDayBoundaryFilter(allEntries)
-                                        val label = buildNotificationLabel(
-                                            result.totalMatches,
-                                            result.analyzedCount,
-                                            result.cutoffDate
+                                        val result = notificationRepository!!.runNotificationPipeline(
+                                            userQuery = "",
+                                            excludedApps = excluded,
+                                            appLabels = notificationRepository!!.getDistinctAppLabels(),
+                                            quickInfer = { prompt -> inferenceEngine!!.quickInfer(prompt) },
+                                            onEscalation = { msg ->
+                                                mainScope.launch(Dispatchers.Main) {
+                                                    Toast.makeText(this@ChatActivity, msg, Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                                        val label = buildNotificationLabel(
+                                            result.analyzedCount,
+                                            result.totalMatches,
+                                            result.oldestIncludedTimestamp,
+                                            result.isEntryTooLarge
+                                        )
                                         withContext(Dispatchers.Main) {
                                             _notificationHistory.value = historyText
                                             _notificationCutoffLabel.value = label
@@ -214,13 +203,13 @@ class ChatActivity : ComponentActivity() {
                             _notificationCutoffLabel.value = null
                         }
                     },
+
                     notificationCutoffLabel = _notificationCutoffLabel.value,
                     availableNotificationApps = _availableNotificationApps.value,
                     excludedNotificationApps = _excludedNotificationApps.value,
                     onNotificationAppSelectionChange = { excluded ->
                         _excludedNotificationApps.value = excluded
                         NotificationPrefs.saveExcludedApps(this, excluded)
-                        // Refresh preview if already in notification mode
                         if (_isNotificationMode.value) {
                             mainScope.launch(Dispatchers.IO) {
                                 try {
@@ -228,18 +217,28 @@ class ChatActivity : ComponentActivity() {
                                     val totalCount = notificationRepository!!.getTotalCount(excludedList)
                                     if (totalCount == 0) {
                                         withContext(Dispatchers.Main) {
-                                            _notificationCutoffLabel.value = "🔔 No notifications logged"
+                                            _notificationCutoffLabel.value = "🔔 0/0 · no matches"
                                             _notificationHistory.value = ""
                                         }
                                     } else {
-                                        val allEntries = notificationRepository!!.getAllNotifications(excludedList)
-                                        val result = notificationRepository!!.applyDayBoundaryFilter(allEntries)
-                                        val label = buildNotificationLabel(
-                                            result.totalMatches,
-                                            result.analyzedCount,
-                                            result.cutoffDate
+                                        val result = notificationRepository!!.runNotificationPipeline(
+                                            userQuery = "",
+                                            excludedApps = excludedList,
+                                            appLabels = notificationRepository!!.getDistinctAppLabels(),
+                                            quickInfer = { prompt -> inferenceEngine!!.quickInfer(prompt) },
+                                            onEscalation = { msg ->
+                                                mainScope.launch(Dispatchers.Main) {
+                                                    Toast.makeText(this@ChatActivity, msg, Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                                        val label = buildNotificationLabel(
+                                            result.analyzedCount,
+                                            result.totalMatches,
+                                            result.oldestIncludedTimestamp,
+                                            result.isEntryTooLarge
+                                        )
                                         withContext(Dispatchers.Main) {
                                             _notificationHistory.value = historyText
                                             _notificationCutoffLabel.value = label
@@ -286,10 +285,21 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
-    private fun buildNotificationLabel(totalMatches: Int, analyzedCount: Int, cutoffDate: LocalDate?): String {
+    private fun buildNotificationLabel(
+        analyzedCount: Int,
+        totalMatches: Int,
+        oldestTimestamp: Long?,
+        isEntryTooLarge: Boolean
+    ): String {
         return when {
-            totalMatches == 0 -> "🔔 No notifications logged"
-            else -> "🔔 Latest $analyzedCount/$totalMatches notifications used"
+            isEntryTooLarge -> "🔔 0/$totalMatches · entry exceeds budget"
+            totalMatches == 0 -> "🔔 0/0 · no matches"
+            analyzedCount == totalMatches -> "🔔 $analyzedCount/$totalMatches · full set"
+            else -> {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val dateStr = oldestTimestamp?.let { sdf.format(Date(it)) } ?: "unknown"
+                "🔔 $analyzedCount/$totalMatches · back to $dateStr"
+            }
         }
     }
 
@@ -318,45 +328,141 @@ class ChatActivity : ComponentActivity() {
             DebugLogger.i(TAG, bitmapInfo)
         }
 
-        _responseText.value = ""
-        _isGenerating.value = true
-
-        inferenceEngine?.analyze(
-            bitmap = bitmap,
-            query = query,
-            useVisualMode = useVisualMode,
-            useWebSearch = useNetSearch,
-            useNotificationHistory = _isNotificationMode.value,
-            notificationHistory = _notificationHistory.value,
-            onToken = { token ->
-                mainScope.launch {
-                    _responseText.value += token
-                }
-            },
-            onComplete = {
-                mainScope.launch {
-                    _isGenerating.value = false
-                    DebugLogger.i(TAG, "Inference complete")
-                }
-            },
-            onError = { error ->
-                mainScope.launch {
-                    if (_isNetEnabled.value) {
-                        _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
-                    } else {
-                        _responseText.value += "\nError: $error"
+        if (_isNotificationMode.value) {
+            _responseText.value = "> ANALYZING QUERY..."
+            _isGenerating.value = true
+            mainScope.launch(Dispatchers.IO) {
+                try {
+                    val excluded = _excludedNotificationApps.value.toList()
+                    val result = notificationRepository!!.runNotificationPipeline(
+                        userQuery = query,
+                        excludedApps = excluded,
+                        appLabels = notificationRepository!!.getDistinctAppLabels(),
+                        quickInfer = { prompt -> inferenceEngine!!.quickInfer(prompt) },
+                        onEscalation = { msg ->
+                            mainScope.launch(Dispatchers.Main) {
+                                Toast.makeText(this@ChatActivity, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                    val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
+                    val label = buildNotificationLabel(
+                        result.analyzedCount,
+                        result.totalMatches,
+                        result.oldestIncludedTimestamp,
+                        result.isEntryTooLarge
+                    )
+                    withContext(Dispatchers.Main) {
+                        _notificationHistory.value = historyText
+                        _notificationCutoffLabel.value = label
                     }
-                    _isGenerating.value = false
-                    DebugLogger.e(TAG, "Inference error: $error")
-                }
-            },
-            onWebSearchError = { error ->
-                mainScope.launch {
-                    _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
-                    Toast.makeText(this@ChatActivity, error, Toast.LENGTH_LONG).show()
+
+                    if (result.isEntryTooLarge) {
+                        withContext(Dispatchers.Main) {
+                            _responseText.value = "One matching notification was found but exceeds the analysis budget. Try a more specific query."
+                            _isGenerating.value = false
+                        }
+                        return@launch
+                    }
+
+                    val filterMeta = buildString {
+                        append("\n\n[Search metadata: confidence=${result.structuredFilter.confidence}, strategy=${result.structuredFilter.strategy}")
+                        if (result.escalationStep > 0) {
+                            append(", escalation=${result.escalationStep}")
+                        }
+                        if (result.structuredFilter.targetApps.isNotEmpty()) {
+                            append(", apps=${result.structuredFilter.targetApps.joinToString(", ")}")
+                        }
+                        append("]")
+                    }
+                    val historyWithMeta = historyText + filterMeta
+
+                    inferenceEngine?.analyze(
+                        bitmap = bitmap,
+                        query = query,
+                        useVisualMode = useVisualMode,
+                        useWebSearch = useNetSearch,
+                        useNotificationHistory = true,
+                        notificationHistory = historyWithMeta,
+                        onToken = { token ->
+                            mainScope.launch {
+                                _responseText.value += token
+                            }
+                        },
+                        onComplete = {
+                            mainScope.launch {
+                                _isGenerating.value = false
+                                DebugLogger.i(TAG, "Inference complete")
+                            }
+                        },
+                        onError = { error ->
+                            mainScope.launch {
+                                if (_isNetEnabled.value) {
+                                    _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
+                                } else {
+                                    _responseText.value += "\nError: $error"
+                                }
+                                _isGenerating.value = false
+                                DebugLogger.e(TAG, "Inference error: $error")
+                            }
+                        },
+                        onWebSearchError = { error ->
+                            mainScope.launch {
+                                _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
+                                Toast.makeText(this@ChatActivity, error, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    )
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        _responseText.value = "Error: ${e.message}"
+                        _isGenerating.value = false
+                    }
                 }
             }
-        )
+        } else {
+            _responseText.value = ""
+            _isGenerating.value = true
+            inferenceEngine?.analyze(
+                bitmap = bitmap,
+                query = query,
+                useVisualMode = useVisualMode,
+                useWebSearch = useNetSearch,
+                useNotificationHistory = false,
+                notificationHistory = null,
+                onToken = { token ->
+                    mainScope.launch {
+                        _responseText.value += token
+                    }
+                },
+                onComplete = {
+                    mainScope.launch {
+                        _isGenerating.value = false
+                        DebugLogger.i(TAG, "Inference complete")
+                    }
+                },
+                onError = { error ->
+                    mainScope.launch {
+                        if (_isNetEnabled.value) {
+                            _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
+                        } else {
+                            _responseText.value += "\nError: $error"
+                        }
+                        _isGenerating.value = false
+                        DebugLogger.e(TAG, "Inference error: $error")
+                    }
+                },
+                onWebSearchError = { error ->
+                    mainScope.launch {
+                        _responseText.value = "WEB SEARCH ERROR:
+$error
+
+[Toggle web OFF for local LLM]"
+                        Toast.makeText(this@ChatActivity, error, Toast.LENGTH_LONG).show()
+                    }
+                }
+            )
+        }
     }
 
     override fun onDestroy() {
@@ -383,16 +489,9 @@ class ChatActivity : ComponentActivity() {
     }
 }
 
-// Phosphor Green Cyberpunk Colors
 private val PhosphorGreen = Color(0xFF39FF14)
 private val GunmetalBg = Color(0xFF0A0F0A)
 
-/**
- * PiP-style Chat Screen - Transparent background with keyboard-aware height constraint
- *
- * When keyboard opens, the PiP window stays anchored and squishes vertically.
- * Iris (header) and input field stay visible; response area shrinks via weight(1f).
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatScreenPiP(
@@ -419,27 +518,22 @@ private fun ChatScreenPiP(
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
 
-    // Keyboard insets
     val imeInsets = WindowInsets.ime
     val density = LocalDensity.current
     val keyboardHeight = imeInsets.getBottom(density)
     val keyboardHeightDp = with(density) { keyboardHeight.toDp() }
 
-    // Screen dimensions for height calculation
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val topMargin = 120.dp  // Increased for Pip-Boy wrist position
-    val bottomMargin = 16.dp  // Tighter for compact display
+    val topMargin = 120.dp
+    val bottomMargin = 16.dp
     val safetyPadding = 8.dp
 
-    // Calculate max available height: screen minus keyboard minus margins
-    // Pip-Boy compact terminal: 380dp max
     val availableHeight = if (keyboardHeightDp > 0.dp) {
         screenHeight - keyboardHeightDp - topMargin - bottomMargin - safetyPadding
     } else {
-        380.dp // Default compact height when keyboard closed
-    }.coerceAtMost(380.dp).coerceAtLeast(180.dp) // Min to keep Iris visible
+        380.dp
+    }.coerceAtMost(380.dp).coerceAtLeast(180.dp)
 
-    // Detect if keyboard is open for GhostInterface
     val isKeyboardOpen = keyboardHeightDp > 0.dp
 
     Box(
@@ -460,12 +554,11 @@ private fun ChatScreenPiP(
                 animationSpec = tween(durationMillis = 300)
             )
         ) {
-            // Pip-Boy terminal container: compact industrial housing
             Box(
                 modifier = Modifier
-                    .width(260.dp)  // Compact wrist-mounted display
+                    .width(260.dp)
                     .heightIn(max = availableHeight)
-                    .clip(RoundedCornerShape(2.dp))  // Almost square industrial corners
+                    .clip(RoundedCornerShape(2.dp))
                     .background(GunmetalBg.copy(alpha = 0.95f))
                     .border(
                         width = 4.dp,

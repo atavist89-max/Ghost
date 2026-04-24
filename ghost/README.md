@@ -1,4 +1,4 @@
-# Ghost v1.5
+# Ghost v2.0
 
 Privacy-first on-demand screen analysis for Android 16 / Samsung One UI 8.0
 
@@ -13,7 +13,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 - 🔊 **HAL 9000 Voice Synthesis**: Sherpa-ONNX Piper TTS with morphing Play/HAL button and staccato pulse animation
 - 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
 - 🌐 **Optional Web Search**: Wikipedia API via MediaWiki (no API key required). Full article injected into prompt
-- 🔔 **Notification Historian**: Agentic search over your local notification stream using on-device LLM. Background logger captures notifications 24/7; PiP queries them on demand
+- 🔔 **Notification Historian v2.0**: Intent-driven two-stage pipeline — LLM extracts structured search parameters, app builds deterministic SQL, token-greedy accumulator trims results, then LLM performs reading comprehension on the relevant subset. Background logger captures notifications 24/7; PiP queries them on demand
 - 🔋 **Zero Background Drain**: No LLM/TTS in background service; app fully terminates when PiP closes
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
@@ -280,7 +280,13 @@ GhostActivity (Entry Point)
 │   ├── Model Loader (/storage/emulated/0/Download/GhostModels/)
 │   ├── HexagonNpuDelegate (primary) / GpuDelegate (fallback)
 │   ├── WikipediaSearchService (MediaWiki API client, no key needed)
-│   └── AsyncTokenGenerator (streaming responses)
+│   ├── quickInfer() — single-prompt non-streaming (Stage 1 intent extraction)
+│   └── analyze() — streaming with notification history context (Stage 3 analysis)
+├── Notification Historian Pipeline
+│   ├── NotificationLoggerService — NotificationListenerService (24/7 logging)
+│   ├── NotificationDatabase — SQLite with WAL mode
+│   ├── NotificationRepository — Stage 1-2.5: intent extraction → SQL → token accumulator
+│   └── NotificationPrefs — excluded app filters
 ├── WindowManager Overlay (TYPE_APPLICATION_OVERLAY)
 │   ├── 340dp×600dp PiP window
 │   ├── Jetpack Compose UI (Material3 dark theme)
@@ -305,16 +311,22 @@ GhostActivity (Entry Point)
 ghost/
 ├── app/src/main/java/com/ghost/app/
 │   ├── GhostActivity.kt          # Main orchestrator
+│   ├── ChatActivity.kt           # PiP UI, notification pipeline controller
 │   ├── GhostApplication.kt       # Application class
 │   ├── capture/
 │   │   ├── ScreenCaptureManager.kt
 │   │   └── BitmapConverter.kt
 │   ├── inference/
-│   │   ├── InferenceEngine.kt
+│   │   ├── InferenceEngine.kt    # LiteRT-LM wrapper (quickInfer + analyze)
 │   │   ├── WikipediaSearchService.kt # MediaWiki API client
 │   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
 │   │   ├── ModelValidator.kt
 │   │   └── ThermalMonitor.kt
+│   ├── notification/
+│   │   ├── NotificationRepository.kt  # v2.0 pipeline: intent → SQL → accumulator
+│   │   ├── NotificationDatabase.kt    # SQLite schema + WAL
+│   │   ├── NotificationLoggerService.kt # Background NotificationListenerService
+│   │   └── NotificationPrefs.kt       # Excluded app filter persistence
 │   ├── ui/
 │   │   ├── GhostWindowManager.kt
 │   │   ├── GhostInterface.kt
@@ -398,8 +410,22 @@ Private use only. Not for redistribution.
 
 ## Version History
 
+### v2.0 (2026-04-24) — Notification Historian Refactor
+- Replaced day-boundary filter with **intent-driven two-stage inference pipeline**
+  - **Stage 1**: `quickInfer()` extracts `StructuredFilter` (target apps, person/topic keywords, time scope, confidence, strategy) from natural language
+  - **Stage 2**: Deterministic parameterized SQL built from `StructuredFilter` — LLM never writes raw SQL
+  - **Stage 2.5**: Token-greedy accumulator replaces broken calendar-day logic; operates on formatted output length against `EFFECTIVE_BUDGET` (1,580 tokens)
+  - **Stage 3**: `analyze()` performs reading comprehension on the trimmed, relevant context
+- **Zero-result escalation path**: transparently widens search by dropping topic keywords → person keywords → target apps → time filter → fallback to 300 newest
+- **Confidence/strategy matrix**: downgrades vague queries (low confidence / broad strategy drops all keyword filters; medium + precise broadens to OR)
+- **Excluded apps override LLM targets**: user dropdown exclusions always win over LLM-extracted app labels
+- **Revised status label**: `🔔 {used}/{relevant} · {indicator}` where indicator is `back to YYYY-MM-DD`, `full set`, `no matches`, or `entry exceeds budget`
+- **Preview mode** bypasses Stage 1 to avoid wasting an inference call; uses broad filter with `LIMIT 300`
+- **Entry-too-large safeguard**: single notification exceeding budget shows direct message instead of calling `analyze()`
+- **Stage 1 loading state**: `> ANALYZING QUERY...` displayed while `quickInfer()` runs
+
 ### v1.5.2 (2026-04-22)
-- Added **Notification Historian** feature
+- Added **Notification Historian v1** feature
   - `NotificationLoggerService` — `NotificationListenerService` that logs all notifications to SQLite 24/7
   - `NotificationDatabase` — flat-log SQLite with WAL mode for concurrent read/write
   - `NotificationRepository` — day-boundary greedy token-budget pre-filter (1,600 token safe budget)
