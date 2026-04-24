@@ -1,6 +1,9 @@
 package com.ghost.app
 
 import android.app.Activity
+import android.app.NotificationManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
@@ -10,6 +13,7 @@ import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import com.ghost.app.inference.ModelValidator
+import com.ghost.app.notification.NotificationLoggerService
 import com.ghost.app.utils.GhostPaths
 import com.ghost.app.utils.PermissionChecker
 import java.io.File
@@ -34,6 +38,7 @@ class GhostActivity : Activity() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var redirectedForNotification = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,18 +75,53 @@ class GhostActivity : Activity() {
         if (!GhostAccessibilityService.isConnected()) {
             Log.w(TAG, "AccessibilityService enabled but not connected yet")
             Toast.makeText(
-                this, 
-                getString(R.string.accessibility_service_connecting), 
+                this,
+                getString(R.string.accessibility_service_connecting),
                 Toast.LENGTH_SHORT
             ).show()
             finish()
             return
         }
-        
+
+        // Check NotificationListenerService is enabled
+        if (!isNotificationListenerEnabled()) {
+            Log.i(TAG, "Notification listener not enabled, redirecting to settings")
+            Toast.makeText(
+                this,
+                "Notification access is required for the historian feature",
+                Toast.LENGTH_LONG
+            ).show()
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            redirectedForNotification = true
+            return
+        }
+
         // Take silent screenshot
         takeSilentScreenshot()
     }
     
+    override fun onResume() {
+        super.onResume()
+        if (redirectedForNotification && !isNotificationListenerEnabled()) {
+            Log.i(TAG, "Returned from settings without enabling notification listener, finishing")
+            finish()
+        }
+        redirectedForNotification = false
+    }
+
+    /**
+     * Check if NotificationListenerService is enabled in system settings.
+     */
+    private fun isNotificationListenerEnabled(): Boolean {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val enabledListeners = notificationManager.enabledNotificationListeners ?: return false
+        val myComponent = ComponentName(this, NotificationLoggerService::class.java)
+        return enabledListeners.any { it == myComponent }
+    }
+
     /**
      * Check if AccessibilityService is enabled in system settings.
      */

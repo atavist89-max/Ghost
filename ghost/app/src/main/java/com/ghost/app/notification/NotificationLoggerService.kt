@@ -90,7 +90,25 @@ class NotificationLoggerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
-        val dbInstance = db ?: return
+
+        // Reconnect if database was closed (process kill, thermal stress, etc.)
+        var dbInstance = db
+        if (dbInstance?.isOpen != true) {
+            Log.w(TAG, "Database connection lost, attempting reopen")
+            try {
+                database = NotificationDatabase(this)
+                db = database?.writableDatabase
+                dbInstance = db
+                Log.i(TAG, "Database reopened successfully")
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to reopen database, dropping notification", t)
+                return
+            }
+        }
+        if (dbInstance == null) {
+            Log.e(TAG, "Database is null after reopen attempt, dropping notification")
+            return
+        }
 
         try {
             val extras = sbn.notification?.extras ?: return
@@ -145,8 +163,8 @@ class NotificationLoggerService : NotificationListenerService() {
                 android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
             )
             Log.d(TAG, "Logged notification from $packageName at ${sbn.postTime}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error logging notification", e)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error logging notification", t)
         }
     }
 
