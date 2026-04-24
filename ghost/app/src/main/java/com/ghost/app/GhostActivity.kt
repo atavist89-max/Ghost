@@ -117,7 +117,7 @@ class GhostActivity : Activity() {
      */
     private fun isNotificationListenerEnabled(): Boolean {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val enabledListeners = notificationManager.enabledNotificationListeners ?: return false
+        val enabledListeners = notificationManager.getEnabledNotificationListeners() ?: return false
         val myComponent = ComponentName(this, NotificationLoggerService::class.java)
         return enabledListeners.any { it == myComponent }
     }
