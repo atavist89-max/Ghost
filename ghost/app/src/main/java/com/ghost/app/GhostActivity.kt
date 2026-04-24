@@ -1,9 +1,7 @@
 package com.ghost.app
 
 import android.app.Activity
-import android.app.NotificationManager
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
@@ -116,10 +114,12 @@ class GhostActivity : Activity() {
      * Check if NotificationListenerService is enabled in system settings.
      */
     private fun isNotificationListenerEnabled(): Boolean {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val enabledListeners = notificationManager.getEnabledNotificationListeners() ?: return false
-        val myComponent = ComponentName(this, NotificationLoggerService::class.java)
-        return enabledListeners.any { it == myComponent }
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_NOTIFICATION_LISTENERS
+        ) ?: return false
+        val myComponent = ComponentName(this, NotificationLoggerService::class.java).flattenToString()
+        return enabledServices.contains(myComponent)
     }
 
     /**
