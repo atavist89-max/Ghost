@@ -454,10 +454,7 @@ class ChatActivity : ComponentActivity() {
                 },
                 onWebSearchError = { error ->
                     mainScope.launch {
-                        _responseText.value = "WEB SEARCH ERROR:
-$error
-
-[Toggle web OFF for local LLM]"
+                        _responseText.value = "WEB SEARCH ERROR:\n$error\n\n[Toggle web OFF for local LLM]"
                         Toast.makeText(this@ChatActivity, error, Toast.LENGTH_LONG).show()
                     }
                 }
