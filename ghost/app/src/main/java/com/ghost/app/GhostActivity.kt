@@ -116,7 +116,7 @@ class GhostActivity : Activity() {
     private fun isNotificationListenerEnabled(): Boolean {
         val enabledServices = Settings.Secure.getString(
             contentResolver,
-            Settings.Secure.ENABLED_NOTIFICATION_LISTENERS
+            "enabled_notification_listeners"
         ) ?: return false
         val myComponent = ComponentName(this, NotificationLoggerService::class.java).flattenToString()
         return enabledServices.contains(myComponent)
