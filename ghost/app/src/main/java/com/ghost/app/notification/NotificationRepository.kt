@@ -36,7 +36,8 @@ data class DayBoundaryFilterResult(
     val analyzedEntries: List<NotificationEntry>,
     val cutoffDate: LocalDate?,
     val totalMatches: Int,
-    val analyzedCount: Int
+    val analyzedCount: Int,
+    val includedDayCount: Int = 1
 )
 
 /**
@@ -53,9 +54,9 @@ class NotificationRepository(context: Context) {
     companion object {
         private const val TAG = "NotificationRepo"
         private const val SAFE_TOKEN_BUDGET = 1800.0
-        // Conservative divisor for short heterogeneous text (notifications, URLs, emojis, app names)
-        // SentencePiece/BPE tokenizers average ~2.5 chars/token for mixed-content short strings
-        private const val TOKEN_DIVISOR = 2.5
+        // Relaxed divisor for short heterogeneous text (notifications, URLs, emojis, app names)
+        // SentencePiece/BPE tokenizers average ~3.5 chars/token for English mixed-content short strings
+        private const val TOKEN_DIVISOR = 3.5
         private const val DAYS_60_MILLIS = 60L * 24 * 60 * 60 * 1000
 
         // Overhead tokens reserved for prompt template and user query
@@ -236,14 +237,15 @@ class NotificationRepository(context: Context) {
      * 1. Group by calendar day (LocalDate from system default zone)
      * 2. Iterate days newest-first
      * 3. The newest day is capped: only its newest entries that fit are included
-     * 4. Subsequent complete days are included atomically until budget exceeded
+     * 4. Subsequent days are capped the same way: iterate newest-first entry-by-entry
+     *    until the budget is exhausted, then stop looking at any older days
      *
      * @param entries List of notifications to filter (assumed newest-first)
      * @return FilterResult with analyzed entries, cutoff date, and counts
      */
     fun applyDayBoundaryFilter(entries: List<NotificationEntry>): DayBoundaryFilterResult {
         if (entries.isEmpty()) {
-            return DayBoundaryFilterResult(emptyList(), null, 0, 0)
+            return DayBoundaryFilterResult(emptyList(), null, 0, 0, 0)
         }
 
         val totalMatches = entries.size
@@ -280,14 +282,26 @@ class NotificationRepository(context: Context) {
                     includedEntries.addAll(includedFromDay)
                 }
             } else {
-                // Subsequent days: include whole day atomically or stop
-                val dayTokens = sortedDay.sumOf { estimateEntryTokens(it) }
-                if (runningTotal + dayTokens > EFFECTIVE_BUDGET) {
+                // Subsequent days: cap to remaining budget, include newest entries that fit
+                var dayRunningTotal = 0.0
+                val includedFromDay = mutableListOf<NotificationEntry>()
+                for (entry in sortedDay) {
+                    val entryTokens = estimateEntryTokens(entry)
+                    if (runningTotal + dayRunningTotal + entryTokens > EFFECTIVE_BUDGET) {
+                        break
+                    }
+                    dayRunningTotal += entryTokens
+                    includedFromDay.add(entry)
+                }
+                if (includedFromDay.isNotEmpty()) {
+                    includedDates.add(date)
+                    runningTotal += dayRunningTotal
+                    includedEntries.addAll(includedFromDay)
+                }
+                // Stop looking at older days once this day didn't fully fit or budget is exhausted
+                if (includedFromDay.size < sortedDay.size) {
                     break
                 }
-                includedDates.add(date)
-                runningTotal += dayTokens
-                includedEntries.addAll(sortedDay)
             }
         }
 
@@ -298,7 +312,8 @@ class NotificationRepository(context: Context) {
             analyzedEntries = includedEntries,
             cutoffDate = cutoffDate,
             totalMatches = totalMatches,
-            analyzedCount = analyzedCount
+            analyzedCount = analyzedCount,
+            includedDayCount = includedDates.size
         )
     }
 

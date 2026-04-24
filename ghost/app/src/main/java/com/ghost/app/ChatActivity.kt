@@ -193,7 +193,8 @@ class ChatActivity : ComponentActivity() {
                                         val label = buildNotificationLabel(
                                             result.totalMatches,
                                             result.analyzedCount,
-                                            result.cutoffDate
+                                            result.cutoffDate,
+                                            result.includedDayCount
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
                                         withContext(Dispatchers.Main) {
@@ -237,7 +238,8 @@ class ChatActivity : ComponentActivity() {
                                         val label = buildNotificationLabel(
                                             result.totalMatches,
                                             result.analyzedCount,
-                                            result.cutoffDate
+                                            result.cutoffDate,
+                                            result.includedDayCount
                                         )
                                         val historyText = notificationRepository!!.buildHistoryText(result.analyzedEntries)
                                         withContext(Dispatchers.Main) {
@@ -286,10 +288,12 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
-    private fun buildNotificationLabel(totalMatches: Int, analyzedCount: Int, cutoffDate: LocalDate?): String {
+    private fun buildNotificationLabel(totalMatches: Int, analyzedCount: Int, cutoffDate: LocalDate?, includedDayCount: Int): String {
         return when {
             totalMatches == 0 -> "🔔 No notifications logged"
-            else -> "🔔 Latest $analyzedCount/$totalMatches notifications used"
+            analyzedCount == totalMatches -> "🔔 Latest $analyzedCount/$totalMatches notifications used · back to $cutoffDate"
+            includedDayCount <= 1 -> "🔔 Latest $analyzedCount/$totalMatches · older days exceeded token budget"
+            else -> "🔔 Latest $analyzedCount/$totalMatches · back to $cutoffDate"
         }
     }
 
