@@ -1,5 +1,10 @@
 # Ghost v1.5
 
+> ⚠️ **PLACEHOLDER IMPLEMENTATION** ⚠️  
+> This is a placeholder UI implementation until the correct API is released. The current version demonstrates the visual design, interaction patterns, and mascot behaviors, but uses stub responses instead of actual LLM inference. The production API integration is pending final SDK release.
+
+---
+
 Privacy-first on-demand screen analysis for Android 16 / Samsung One UI 8.0
 
 ## Overview
@@ -14,6 +19,7 @@ Ghost is a side-loaded Android application that provides instant screen analysis
 - 🖼️ **Visual / Text Mode Toggle**: `TXT` mode (text-only) is default while vision API is broken; tap to switch to `VIS` mode
 - 🌐 **Optional Web Search**: Wikipedia API via MediaWiki (no API key required). Full article injected into prompt
 - 🔔 **Notification Historian**: Agentic search over your local notification stream using on-device LLM. Background logger captures notifications 24/7; PiP queries them on demand
+- 🧹 **Per-App Notification Filter**: Expandable dropdown below the 🔔 bell lets you include/exclude specific apps from notification searches. Selections persist across sessions via SharedPreferences
 - 🔋 **Zero Background Drain**: No LLM/TTS in background service; app fully terminates when PiP closes
 - 🎯 **Android 16 Compliant**: Uses official MediaProjection with permission dialog
 
@@ -285,6 +291,10 @@ GhostActivity (Entry Point)
 │   ├── 340dp×600dp PiP window
 │   ├── Jetpack Compose UI (Material3 dark theme)
 │   └── Draggable + dismissible
+├── Notification Deduplication
+│   ├── Unique expression index: `(datetime(timestamp/1000,'unixepoch'), title, body)`
+│   ├── `INSERT OR IGNORE` at capture time — duplicates silently skipped
+│   └── `cleanupDuplicateNotifications()` safety net at PiP startup
 └── MemoryManager (aggressive cleanup on close)
 ```
 
@@ -315,6 +325,12 @@ ghost/
 │   │   ├── PiperTTS.kt           # HAL 9000 voice synthesis (Sherpa-ONNX)
 │   │   ├── ModelValidator.kt
 │   │   └── ThermalMonitor.kt
+│   ├── notification/
+│   │   ├── NotificationLoggerService.kt
+│   │   ├── NotificationDatabase.kt
+│   │   ├── NotificationRepository.kt
+│   │   ├── KeywordExtractor.kt
+│   │   └── NotificationPrefs.kt
 │   ├── ui/
 │   │   ├── GhostWindowManager.kt
 │   │   ├── GhostInterface.kt
@@ -385,6 +401,22 @@ Device will automatically switch from NPU to GPU if it gets warm
 - Keep Termux in the foreground and disable battery optimization for it
 - Use a strong Wi-Fi connection; mobile data may drop on files this large
 
+## Notification Deduplication
+
+Ghost deduplicates notifications at two layers to prevent spammy apps from bloating the database:
+
+### Capture-Time Deduplication
+When `NotificationLoggerService` receives a notification, it attempts an `INSERT OR IGNORE` against a **unique expression index** on `(datetime(timestamp/1000,'unixepoch'), title, body)`. If an identical notification (same title + same body + same second) already exists, the insert is silently skipped. This happens in microseconds and requires no app-level logic.
+
+### PiP Startup Safety Net
+When the PiP window opens, `ChatActivity` runs `cleanupDuplicateNotifications()` in the background. This query groups the entire table by `(datetime-second, title, body)` and deletes all but the oldest row in each group. It is idempotent and harmless — if the unique index has already prevented all duplicates, this deletes nothing.
+
+### Database Migration
+If you installed Ghost before v1.5.5, your database is at schema v1. On the first PiP launch after updating, `onUpgrade()` automatically:
+1. Deduplicates existing rows (keeps oldest ID per group)
+2. Creates the unique expression index
+Future installs create the index at `onCreate()` time.
+
 ## Safety & Privacy
 
 - **No data leaves the device by default**: INTERNET permission is only used for optional Wikipedia web search. All LLM inference is local.
@@ -398,16 +430,44 @@ Private use only. Not for redistribution.
 
 ## Version History
 
+### v1.5.5 (2026-04-23)
+- **Notification Deduplication**
+  - Unique SQLite expression index on `(datetime(timestamp/1000,'unixepoch'), title, body)` prevents duplicate inserts at capture time
+  - `INSERT OR IGNORE` in `NotificationLoggerService` silently skips duplicates
+  - DB migration v1→v2: deduplicates existing rows then creates the unique index
+  - `cleanupDuplicateNotifications()` safety net runs at every PiP startup in `ChatActivity`
+
+### v1.5.4 (2026-04-23)
+- **Critical Bug Fixes: Cleanup, Filter, and Token Economics**
+  - Removed post-query destructive delete from `ChatActivity.onComplete` — 60-day startup cleanup is now the only retention policy
+  - Removed redundant `cleanupOldNotifications()` from `GhostActivity`
+  - Removed dead code `loadPrefiltered()` and `deleteOlderThan()` from `NotificationRepository`
+  - Fixed token estimation: counts actual formatted output line length with conservative `TOKEN_DIVISOR = 2.5`
+  - Reserves 220 tokens for prompt template + user query overhead (`EFFECTIVE_BUDGET = 1580`)
+  - Fixed first-day bug: newest day is now capped entry-by-entry if it exceeds budget alone
+  - Added hard guardrail in `InferenceEngine`: rejects prompts >4000 estimated tokens before sending to model
+- **UI Font Size Increases**
+  - App selector dropdown font increased by 50% (`10.sp` → `15.sp`)
+  - Notification label font increased by 20% (`12.sp` → `14.sp`)
+
+### v1.5.3 (2026-04-22)
+- **Per-App Notification Filter**
+  - Expandable dropdown below the 🔔 bell shows all apps with notification history
+  - Tap to check/uncheck apps; unchecked apps are excluded from search
+  - Selections saved automatically via `NotificationPrefs` (SharedPreferences)
+  - Label refreshes immediately when filter changes
+- Updated README and architecture docs
+
 ### v1.5.2 (2026-04-22)
 - Added **Notification Historian** feature
   - `NotificationLoggerService` — `NotificationListenerService` that logs all notifications to SQLite 24/7
   - `NotificationDatabase` — flat-log SQLite with WAL mode for concurrent read/write
-  - `NotificationRepository` — day-boundary greedy token-budget pre-filter (1,600 token safe budget)
+  - `NotificationRepository` — keyword-based SQLite search + day-boundary greedy token filter (1,600 token safe budget)
+  - `KeywordExtractor` — deterministic zero-LLM keyword extraction with 150+ stop words
   - 🔔 toggle in PiP header (TXT mode only), mutually exclusive with 🌐 Wikipedia toggle
-  - Input hint changes to "Search your notifications..." when active
-  - Response area shows `[NOTIFICATION MODE]` indicator
-  - Oldest-from date label displayed above input field
-  - Destructive cleanup after each Bell press keeps DB bounded
+  - Three-tier status label: `{matches} matches | {analyzed} analyzed | Back to: {date}`
+  - 60-day automatic cleanup on PiP startup (background service never deletes)
+  - ~~Post-query destructive delete~~ removed in v1.5.4 — cleanup is now startup-only
 - Added `BIND_NOTIFICATION_LISTENER_SERVICE` permission
 - Updated architecture diagram and README
 
@@ -453,4 +513,4 @@ Private use only. Not for redistribution.
 - Hexagon NPU support with GPU fallback
 - Floating PiP Compose UI
 - Thermal monitoring
-# Build Sat Apr 13 20:10:00 UTC 2026
+# Build Tue Apr 22 06:25:00 UTC 2026
